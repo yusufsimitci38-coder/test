@@ -43,7 +43,6 @@
   const resultTime = document.getElementById('result-time');
   const resultNewBest = document.getElementById('result-new-best');
   const catchTrack = document.getElementById('catch-track');
-  const catchPointer = document.getElementById('catch-pointer');
   const catchLeftBtn = document.getElementById('catch-left');
   const catchRightBtn = document.getElementById('catch-right');
   const meatCaughtDisplay = document.getElementById('meat-caught-display');
@@ -117,7 +116,7 @@
     timerDisplay.textContent = '0.0s';
     meatCaughtDisplay.textContent = '0';
     catchTrack.querySelectorAll('.meat-chunk').forEach(el => el.remove());
-    catchPointer.style.left = `${slotToPercent(state.chopstickSlot)}%`;
+    playerChopsticks.style.left = `${slotToPercent(state.chopstickSlot)}%`;
     showScreen('game');
     state.rafId = requestAnimationFrame(loop);
     scheduleMeatSpawn();
@@ -166,9 +165,15 @@
     const next = Math.min(CATCH_SLOT_COUNT - 1, Math.max(0, state.chopstickSlot + delta));
     if (next === state.chopstickSlot) return;
     state.chopstickSlot = next;
-    catchPointer.style.left = `${slotToPercent(next)}%`;
+    playerChopsticks.style.left = `${slotToPercent(next)}%`;
     const chunk = state.meatChunks.find(c => c.slot === next);
     if (chunk) catchMeatChunk(chunk);
+  }
+
+  function triggerChomp() {
+    playerChopsticks.classList.remove('slurping');
+    void playerChopsticks.offsetWidth;
+    playerChopsticks.classList.add('slurping');
   }
 
   function scheduleMeatSpawn() {
@@ -226,6 +231,7 @@
     state.playerProgress = Math.min(100, state.playerProgress + MEAT_BONUS_GAIN);
     playerFill.style.width = `${state.playerProgress}%`;
     playerNoodles.style.height = `${100 - state.playerProgress}%`;
+    triggerChomp();
     spawnFloatText(MEAT_BONUS_GAIN, catchTrack, ' 🍖');
 
     if (state.playerProgress >= 100) {
@@ -249,9 +255,7 @@
     playerFill.style.width = `${state.playerProgress}%`;
     playerNoodles.style.height = `${100 - state.playerProgress}%`;
 
-    playerChopsticks.classList.remove('slurping');
-    void playerChopsticks.offsetWidth;
-    playerChopsticks.classList.add('slurping');
+    triggerChomp();
 
     spawnFloatText(gain, slurpBtn);
 
