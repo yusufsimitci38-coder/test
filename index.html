@@ -15,7 +15,7 @@
 
     <div id="screen-start" class="screen active">
       <div class="card">
-        <p>Mash <strong>SPACE</strong> or tap the <strong>SLURP!</strong> button to eat your ramen before your rival finishes theirs. Chain fast slurps for a combo bonus!</p>
+        <p>Mash <strong>SPACE</strong> or tap the <strong>SLURP!</strong> button to eat your ramen before your rival finishes theirs. Use <strong>◀ ▶</strong> (or Arrow keys / A-D) to slide your chopsticks and catch meat chunks 🍖 for bonus progress. Chain fast slurps for a combo bonus!</p>
         <div class="difficulty-select">
           <span>Rival speed:</span>
           <div class="diff-buttons" id="diff-buttons">
@@ -42,6 +42,23 @@
             </div>
             <div class="chopsticks" id="player-chopsticks">🥢</div>
           </div>
+
+          <div class="catch-track" id="catch-track">
+            <div class="catch-slots">
+              <div class="catch-slot-marker"></div>
+              <div class="catch-slot-marker"></div>
+              <div class="catch-slot-marker"></div>
+              <div class="catch-slot-marker"></div>
+              <div class="catch-slot-marker"></div>
+            </div>
+            <div class="catch-pointer" id="catch-pointer">🥢</div>
+          </div>
+          <div class="catch-controls">
+            <button class="catch-btn" id="catch-left" aria-label="Move chopsticks left">◀</button>
+            <span class="catch-hint">Catch the meat!</span>
+            <button class="catch-btn" id="catch-right" aria-label="Move chopsticks right">▶</button>
+          </div>
+
           <div class="progress-bar"><div class="progress-fill player-fill" id="player-fill"></div></div>
         </div>
 
@@ -68,6 +85,10 @@
         <div class="hud-item">
           <span class="hud-label">Combo</span>
           <span class="hud-value" id="combo-display">x1.0</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">Meat</span>
+          <span class="hud-value" id="meat-caught-display">0</span>
         </div>
       </div>
 
