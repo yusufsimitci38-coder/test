@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ramen Race 🍜</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header>
+      <h1>🍜 Ramen Race</h1>
+      <p class="tagline">Slurp as fast as you can. Beat the clock. Beat the rival.</p>
+    </header>
+
+    <div id="screen-start" class="screen active">
+      <div class="card">
+        <p>Mash <strong>SPACE</strong> or tap the <strong>SLURP!</strong> button to eat your ramen before your rival finishes theirs. Chain fast slurps for a combo bonus!</p>
+        <div class="difficulty-select">
+          <span>Rival speed:</span>
+          <div class="diff-buttons" id="diff-buttons">
+            <button class="diff-btn" data-diff="easy">Easy</button>
+            <button class="diff-btn selected" data-diff="normal">Normal</button>
+            <button class="diff-btn" data-diff="hard">Hard</button>
+          </div>
+        </div>
+        <button id="start-btn" class="primary-btn">Start Race</button>
+        <p class="best-time" id="best-time-display"></p>
+      </div>
+    </div>
+
+    <div id="screen-game" class="screen">
+      <div class="race-track">
+        <div class="lane player-lane">
+          <div class="lane-label">You</div>
+          <div class="bowl-wrap">
+            <div class="bowl">
+              <div class="noodles" id="player-noodles"></div>
+              <div class="steam s1"></div>
+              <div class="steam s2"></div>
+              <div class="steam s3"></div>
+            </div>
+            <div class="chopsticks" id="player-chopsticks">🥢</div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill player-fill" id="player-fill"></div></div>
+        </div>
+
+        <div class="lane rival-lane">
+          <div class="lane-label">Rival</div>
+          <div class="bowl-wrap">
+            <div class="bowl">
+              <div class="noodles" id="rival-noodles"></div>
+              <div class="steam s1"></div>
+              <div class="steam s2"></div>
+              <div class="steam s3"></div>
+            </div>
+            <div class="chopsticks rival-sticks">🥢</div>
+          </div>
+          <div class="progress-bar"><div class="progress-fill rival-fill" id="rival-fill"></div></div>
+        </div>
+      </div>
+
+      <div class="hud">
+        <div class="hud-item">
+          <span class="hud-label">Time</span>
+          <span class="hud-value" id="timer-display">0.0s</span>
+        </div>
+        <div class="hud-item">
+          <span class="hud-label">Combo</span>
+          <span class="hud-value" id="combo-display">x1.0</span>
+        </div>
+      </div>
+
+      <button id="slurp-btn" class="slurp-btn">SLURP!</button>
+      <div id="floating-layer"></div>
+    </div>
+
+    <div id="screen-result" class="screen">
+      <div class="card">
+        <h2 id="result-title">You win!</h2>
+        <p id="result-time"></p>
+        <p id="result-new-best" class="new-best"></p>
+        <button id="retry-btn" class="primary-btn">Race Again</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
