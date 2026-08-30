@@ -28,13 +28,33 @@ function load() {
 }
 
 let saveTimer = null;
+let warnedAboutDisk = false;
+function persistToDisk() {
+  try {
+    fs.mkdirSync(path.dirname(config.dataFile), { recursive: true });
+    fs.writeFileSync(config.dataFile, JSON.stringify(state, null, 2));
+  } catch (err) {
+    // Some hosts (e.g. Railway without a mounted volume) run the app on a
+    // read-only or ephemeral filesystem. Losing persistence there just means
+    // data resets on restart - it must never crash the process, since an
+    // uncaught exception here (this runs inside a bare setTimeout callback)
+    // would kill the whole server and make every request start timing out.
+    if (!warnedAboutDisk) {
+      console.warn(
+        `[db] could not write ${config.dataFile} (${err.message}). ` +
+          'Data will not persist across restarts - if this is unexpected, check that the app has a writable/mounted data directory.'
+      );
+      warnedAboutDisk = true;
+    }
+  }
+}
+
 function save() {
   // Debounce writes so a burst of upserts during a refresh doesn't hammer disk.
   if (saveTimer) return;
   saveTimer = setTimeout(() => {
     saveTimer = null;
-    fs.mkdirSync(path.dirname(config.dataFile), { recursive: true });
-    fs.writeFileSync(config.dataFile, JSON.stringify(state, null, 2));
+    persistToDisk();
   }, 50);
 }
 
@@ -44,8 +64,7 @@ function flushSync() {
     saveTimer = null;
   }
   if (!state) return;
-  fs.mkdirSync(path.dirname(config.dataFile), { recursive: true });
-  fs.writeFileSync(config.dataFile, JSON.stringify(state, null, 2));
+  persistToDisk();
 }
 
 function upsertCard(card) {

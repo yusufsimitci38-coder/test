@@ -36,13 +36,27 @@ function sparklinePoints(history) {
     .join(' ');
 }
 
+async function fetchJson(url, opts) {
+  const res = await fetch(url, opts);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`${url} -> HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}`);
+  }
+  return res.json();
+}
+
 async function loadStatus() {
-  const status = await fetch(`${API}/status`).then((r) => r.json());
-  el.statusText.textContent = `Provider: ${status.provider} · ${status.cardCount} cards tracked · ` +
-    `${status.alertCount} alert(s) · last refreshed ${fmtDate(status.lastRefreshAt)}`;
-  el.thresholdNote.textContent =
-    `Alerting on cards ≥ $${status.thresholds.minPrice} with a ≥ ${status.thresholds.pctChange}% ` +
-    `move over the last ${status.thresholds.lookbackDays} days.`;
+  try {
+    const status = await fetchJson(`${API}/status`);
+    el.statusText.textContent = `Provider: ${status.provider} · ${status.cardCount} cards tracked · ` +
+      `${status.alertCount} alert(s) · last refreshed ${fmtDate(status.lastRefreshAt)}`;
+    el.thresholdNote.textContent =
+      `Alerting on cards ≥ $${status.thresholds.minPrice} with a ≥ ${status.thresholds.pctChange}% ` +
+      `move over the last ${status.thresholds.lookbackDays} days.`;
+  } catch (err) {
+    console.error('Failed to load status:', err);
+    el.statusText.textContent = `Couldn't reach the server (${err.message}). Check server logs.`;
+  }
 }
 
 async function loadCards() {
@@ -51,10 +65,19 @@ async function loadCards() {
     alertsOnly: el.alertsOnly.checked,
     sort: el.sortSelect.value,
   });
-  const cards = await fetch(`${API}/cards?${params}`).then((r) => r.json());
+
+  let cards;
+  try {
+    cards = await fetchJson(`${API}/cards?${params}`);
+  } catch (err) {
+    console.error('Failed to load cards:', err);
+    el.container.innerHTML =
+      `<p class="empty-state">Couldn't load cards: ${err.message}<br />Check the server logs, or try "Refresh now".</p>`;
+    return;
+  }
 
   if (!cards.length) {
-    el.container.innerHTML = '<p class="empty-state">No cards match the current filter.</p>';
+    el.container.innerHTML = '<p class="empty-state">No cards yet. Click "Refresh now" to fetch prices.</p>';
     return;
   }
 
