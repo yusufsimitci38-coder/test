@@ -69,6 +69,30 @@ function htmlToStructuredText(html) {
   return stripTagsToPlainText(working);
 }
 
+// Debug-only variant of htmlToStructuredText: also marks table row/cell
+// boundaries and link targets inline, so the real page's structure (e.g. a
+// per-event table with its own venue/time/link columns, rather than one
+// heading per region) is visible in fetchRawText()'s output instead of
+// being silently flattened away like the real extraction pipeline does.
+function htmlToDebugText(html) {
+  let working = html.replace(/<script[\s\S]*?<\/script>/gi, ' ').replace(/<style[\s\S]*?<\/style>/gi, ' ');
+
+  working = working.replace(/<h[1-6][^>]*>([\s\S]*?)<\/h[1-6]>/gi, (_, inner) => {
+    const plain = stripTagsToPlainText(inner);
+    return plain ? ` @@REGION@@${plain}@@/REGION@@ ` : ' ';
+  });
+
+  working = working.replace(/<a\s+[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/gi, (_, href, inner) => {
+    const plain = stripTagsToPlainText(inner);
+    return ` @@LINK:${href}@@${plain}@@/LINK@@ `;
+  });
+
+  working = working.replace(/<tr[^>]*>/gi, ' @@ROW@@ ');
+  working = working.replace(/<t[dh][^>]*>/gi, ' @@CELL@@ ');
+
+  return stripTagsToPlainText(working);
+}
+
 const DATE_WINDOW_RE = /for\s+([a-z]+)\s+events?[:\s]+(?:starts?\s+)?([a-z]+\s+\d{1,2},?\s*\d{4})/gi;
 
 // Matches "For August Events: May 24, 2026" and "For March Events: Starts
@@ -120,13 +144,19 @@ async function fetchRegistrationWindows() {
 // Diagnostic only: raw plain text pulled from each season page (truncated),
 // used by GET /api/event-tracker/debug/bandai-raw to check the real page
 // content (including any @@REGION@@ markers actually found) against what
-// extractRegistrationWindows expects.
+// extractRegistrationWindows expects. debugSample additionally marks table
+// row/cell boundaries (@@ROW@@/@@CELL@@) and link targets (@@LINK:href@@) -
+// meant for a human to eyeball the real structure (e.g. is this actually a
+// per-event table with its own venue/time/link columns, rather than a
+// heading grouping several dates?) since this dev environment can't fetch
+// the page directly to check.
 async function fetchRawText() {
   const results = [];
   for (const page of SEASON_PAGES) {
     try {
       const html = await fetchHtml(page.url);
       const text = htmlToStructuredText(html);
+      const debugText = htmlToDebugText(html);
       results.push({
         label: page.label,
         url: page.url,
@@ -135,6 +165,8 @@ async function fetchRawText() {
         textSample: text.slice(0, 4000),
         regionsFound: [...text.matchAll(/@@REGION@@(.*?)@@\/REGION@@/g)].map((m) => m[1].trim()),
         extracted: extractRegistrationWindows(text, page.label, page.url),
+        debugSampleLength: debugText.length,
+        debugSample: debugText.slice(0, 20000),
       });
     } catch (err) {
       results.push({ label: page.label, url: page.url, ok: false, error: err.message });

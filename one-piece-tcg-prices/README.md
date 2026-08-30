@@ -175,7 +175,12 @@ never blocks the regular event refresh). `GET /api/event-tracker/debug/bandai-ra
 returns the actual extracted plain text from each season page (plus what
 got parsed out of it), which is the fastest way to fix the regex in
 `bandaiRegistration.js` if Bandai's actual wording turns out to differ
-from what it currently expects.
+from what it currently expects. It also returns a `debugSample` - the same
+page, but with table row/cell boundaries (`@@ROW@@`/`@@CELL@@`) and link
+targets (`@@LINK:href@@`) marked inline - for figuring out the real page
+structure (e.g. whether registration dates actually live in a per-event
+table with their own venue/link columns) when the plain-text extraction
+alone isn't enough to tell.
 
 ## Architecture
 
