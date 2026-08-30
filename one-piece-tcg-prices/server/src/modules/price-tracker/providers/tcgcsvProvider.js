@@ -83,6 +83,15 @@ function extendedField(product, patterns) {
   return null;
 }
 
+function normalizeColor(value) {
+  if (!value) return null;
+  return value
+    .split(/[;/]/)
+    .map((c) => c.trim())
+    .filter(Boolean)
+    .join('/');
+}
+
 // Card numbers are formatted like "OP13-001", "EB04-036", "ST01-001" - the
 // part before the dash is the short set code players actually search by
 // (OP17, EB04, ...), which is more reliable for this than the group's own
@@ -111,8 +120,16 @@ function pickGroups(groups, watchlistConfig) {
       return sorted.filter((g) => wanted.has((g.name || '').toLowerCase()));
     }
     case 'recent-sets':
-    default:
-      return sorted.slice(0, watchlistConfig.recentSetCount);
+    default: {
+      // publishedOn can be in the future for presale/announced sets, which
+      // otherwise sort ahead of everything actually released - a presale
+      // set has no market data yet, so picking it here mostly just fills a
+      // watchlist slot with cards that never get a price. "Recent" means
+      // the most recently *released* sets, so exclude anything not out yet.
+      const now = Date.now();
+      const released = sorted.filter((g) => !g.publishedOn || Date.parse(g.publishedOn) <= now);
+      return released.slice(0, watchlistConfig.recentSetCount);
+    }
   }
 }
 
@@ -160,10 +177,12 @@ async function fetchWatchlistPrices(watchlistConfig) {
         setCode: deriveSetCode(number, group),
         number,
         rarity: extendedField(product, [/rarity/i]),
-        // One Piece cards can be dual-color (e.g. "Red/Green"); kept as the
-        // raw string tcgcsv reports rather than split, so the filter list
-        // shows combos as their own entries instead of guessing a split.
-        color: extendedField(product, [/^color$/i, /color/i]),
+        // Dual-color cards come back as "Green;Purple" (semicolon); normalized
+        // to "Green/Purple" so it matches the one delimiter the UI (and the
+        // mock provider's sample data) expects everywhere else. Otherwise
+        // kept as the raw combined string rather than split into an array,
+        // so the filter list shows combos as their own distinct entries.
+        color: normalizeColor(extendedField(product, [/^color$/i, /color/i])),
         imageUrl: product.imageUrl || `https://tcgplayer-cdn.tcgplayer.com/product/${product.productId}_200w.jpg`,
         url: product.url || `https://www.tcgplayer.com/product/${product.productId}`,
         marketPrice: numOrNull(price.marketPrice),
