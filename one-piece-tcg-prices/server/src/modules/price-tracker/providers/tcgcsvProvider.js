@@ -264,4 +264,29 @@ async function fetchSampleRawProduct() {
   };
 }
 
-module.exports = { fetchWatchlistPrices, fetchSampleRawProduct, getLastFetchSummary };
+// Diagnostic only: fetches one specific product fresh from tcgcsv.com by
+// (groupId, productId) - untransformed, so it can be compared against
+// whatever our own pipeline extracted for that same card. Used by
+// GET /api/price-tracker/debug/card/:productId.
+async function fetchRawProductById(groupId, productId) {
+  const categoryId = await findOnePieceCategoryId();
+  const [products, prices] = await Promise.all([
+    listProducts(categoryId, groupId),
+    listPrices(categoryId, groupId),
+  ]);
+  const numericId = Number(productId);
+  const product = products.find((p) => p.productId === numericId) || null;
+  const matchingPrices = prices.filter((p) => p.productId === numericId);
+
+  return {
+    categoryId,
+    groupId,
+    product,
+    matchingPrices,
+    extendedDataFieldNames: Array.isArray(product?.extendedData)
+      ? product.extendedData.map((f) => f.name || f.displayName)
+      : null,
+  };
+}
+
+module.exports = { fetchWatchlistPrices, fetchSampleRawProduct, fetchRawProductById, getLastFetchSummary };

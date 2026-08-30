@@ -40,6 +40,15 @@ router.get('/debug/fetch-summary', (req, res) => {
   res.json(summary);
 });
 
+router.get('/debug/card/:productId', async (req, res) => {
+  try {
+    res.json(await priceService.debugCard(req.params.productId));
+  } catch (err) {
+    console.error('[price-tracker] debug card failed:', err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
 router.post('/refresh', async (req, res) => {
   try {
     const result = await priceService.refreshPrices();

@@ -145,6 +145,21 @@ function getLastFetchSummary() {
   return db.getMeta('lastFetchSummary') || null;
 }
 
+async function debugCard(productId) {
+  const trackedCard = db.getCard(productId);
+  if (!trackedCard) {
+    return { error: `No tracked card with productId ${productId}. Find the correct id via GET /cards, or from the number in its "View on TCGPlayer" link.` };
+  }
+
+  const provider = getProvider();
+  if (typeof provider.fetchRawProductById !== 'function') {
+    return { trackedCard, raw: { error: `The "${config.priceProvider}" provider doesn't support fetching raw source data.` } };
+  }
+
+  const raw = await provider.fetchRawProductById(trackedCard.setId, productId);
+  return { trackedCard, raw };
+}
+
 module.exports = {
   refreshPrices,
   getCards,
@@ -153,4 +168,5 @@ module.exports = {
   getFacets,
   debugSampleProduct,
   getLastFetchSummary,
+  debugCard,
 };
