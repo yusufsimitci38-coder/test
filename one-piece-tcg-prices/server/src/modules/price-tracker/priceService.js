@@ -73,17 +73,41 @@ function computeCardView(card) {
   };
 }
 
-function getCards({ alertsOnly = false, sort = 'pctChange' } = {}) {
+function getCards({ alertsOnly = false, sort = 'pctChange', color = '', setCode = '' } = {}) {
   let views = db.listCards().map(computeCardView);
   if (alertsOnly) views = views.filter((v) => v.alert);
+  if (color) views = views.filter((v) => (v.color || '') === color);
+  if (setCode) views = views.filter((v) => (v.setCode || '') === setCode);
 
+  const byString = (key) => (a, b) => (a[key] || '').localeCompare(b[key] || '');
   const sorters = {
     pctChange: (a, b) => Math.abs(b.pctChange ?? 0) - Math.abs(a.pctChange ?? 0),
     price: (a, b) => (b.currentPrice ?? 0) - (a.currentPrice ?? 0),
     name: (a, b) => a.name.localeCompare(b.name),
+    color: byString('color'),
+    set: byString('setCode'),
   };
   views.sort(sorters[sort] || sorters.pctChange);
   return views;
+}
+
+// Distinct filter values actually present in the tracked cards, so the UI
+// can offer only choices that will return results instead of a hardcoded
+// list that may not match what this watchlist/provider actually has.
+function getFacets() {
+  const cards = db.listCards();
+  const colors = new Set();
+  const setCodes = new Map(); // setCode -> a setName to show alongside it
+
+  for (const card of cards) {
+    if (card.color) colors.add(card.color);
+    if (card.setCode && !setCodes.has(card.setCode)) setCodes.set(card.setCode, card.setName || card.setCode);
+  }
+
+  return {
+    colors: [...colors].sort(),
+    sets: [...setCodes.entries()].map(([code, name]) => ({ code, name })).sort((a, b) => a.code.localeCompare(b.code)),
+  };
 }
 
 function getCardHistory(productId) {
@@ -105,4 +129,4 @@ function getStatus() {
   };
 }
 
-module.exports = { refreshPrices, getCards, getCardHistory, getStatus };
+module.exports = { refreshPrices, getCards, getCardHistory, getStatus, getFacets };

@@ -4,16 +4,16 @@
 // logic has something interesting to show on a fresh checkout.
 
 const SAMPLE_CARDS = [
-  { productId: 500001, name: 'Monkey D. Luffy (Alt Art)', setName: 'OP-01 Romance Dawn', setId: 'mock-op01', number: 'OP01-005', rarity: 'SR', start: 42 },
-  { productId: 500002, name: 'Roronoa Zoro', setName: 'OP-01 Romance Dawn', setId: 'mock-op01', number: 'OP01-025', rarity: 'L', start: 8 },
-  { productId: 500003, name: 'Trafalgar Law (Manga Art)', setName: 'OP-02 Paramount War', setId: 'mock-op02', number: 'OP02-001', rarity: 'SEC', start: 65 },
-  { productId: 500004, name: 'Nami', setName: 'OP-01 Romance Dawn', setId: 'mock-op01', number: 'OP01-016', rarity: 'R', start: 3.5 },
-  { productId: 500005, name: 'Shanks', setName: 'OP-01 Romance Dawn', setId: 'mock-op01', number: 'OP01-120', rarity: 'SEC', start: 120 },
-  { productId: 500006, name: 'Portgas D. Ace', setName: 'OP-02 Paramount War', setId: 'mock-op02', number: 'OP02-013', rarity: 'SR', start: 15 },
-  { productId: 500007, name: 'Charlotte Katakuri', setName: 'OP-03 Pillars of Strength', setId: 'mock-op03', number: 'OP03-098', rarity: 'SEC', start: 55 },
-  { productId: 500008, name: 'Boa Hancock', setName: 'OP-06 Wings of the Captain', setId: 'mock-op06', number: 'OP06-043', rarity: 'SR', start: 6 },
-  { productId: 500009, name: 'Common Filler Card', setName: 'OP-01 Romance Dawn', setId: 'mock-op01', number: 'OP01-050', rarity: 'C', start: 0.35 },
-  { productId: 500010, name: 'Yamato', setName: 'OP-04 Kingdoms of Intrigue', setId: 'mock-op04', number: 'OP04-020', rarity: 'SR', start: 9 },
+  { productId: 500001, name: 'Monkey D. Luffy (Alt Art)', setName: 'OP-01 Romance Dawn', setId: 'mock-op01', setCode: 'OP01', number: 'OP01-005', rarity: 'SR', color: 'Red', start: 42 },
+  { productId: 500002, name: 'Roronoa Zoro', setName: 'OP-01 Romance Dawn', setId: 'mock-op01', setCode: 'OP01', number: 'OP01-025', rarity: 'L', color: 'Green', start: 8 },
+  { productId: 500003, name: 'Trafalgar Law (Manga Art)', setName: 'OP-02 Paramount War', setId: 'mock-op02', setCode: 'OP02', number: 'OP02-001', rarity: 'SEC', color: 'Green', start: 65 },
+  { productId: 500004, name: 'Nami', setName: 'OP-01 Romance Dawn', setId: 'mock-op01', setCode: 'OP01', number: 'OP01-016', rarity: 'R', color: 'Blue', start: 3.5 },
+  { productId: 500005, name: 'Shanks', setName: 'OP-01 Romance Dawn', setId: 'mock-op01', setCode: 'OP01', number: 'OP01-120', rarity: 'SEC', color: 'Red', start: 120 },
+  { productId: 500006, name: 'Portgas D. Ace', setName: 'OP-02 Paramount War', setId: 'mock-op02', setCode: 'OP02', number: 'OP02-013', rarity: 'SR', color: 'Red', start: 15 },
+  { productId: 500007, name: 'Charlotte Katakuri', setName: 'OP-03 Pillars of Strength', setId: 'mock-op03', setCode: 'OP03', number: 'OP03-098', rarity: 'SEC', color: 'Purple', start: 55 },
+  { productId: 500008, name: 'Boa Hancock', setName: 'OP-06 Wings of the Captain', setId: 'mock-op06', setCode: 'OP06', number: 'OP06-043', rarity: 'SR', color: 'Yellow', start: 6 },
+  { productId: 500009, name: 'Common Filler Card', setName: 'OP-01 Romance Dawn', setId: 'mock-op01', setCode: 'OP01', number: 'OP01-050', rarity: 'C', color: 'Black', start: 0.35 },
+  { productId: 500010, name: 'Yamato', setName: 'OP-04 Kingdoms of Intrigue', setId: 'mock-op04', setCode: 'OP04', number: 'OP04-020', rarity: 'SR', color: 'Blue/Purple', start: 9 },
 ];
 
 // Small deterministic PRNG (mulberry32) so every run produces the same history.
@@ -63,8 +63,10 @@ async function fetchWatchlistPrices() {
       name: card.name,
       setName: card.setName,
       setId: card.setId,
+      setCode: card.setCode,
       number: card.number,
       rarity: card.rarity,
+      color: card.color,
       imageUrl: null,
       url: `https://www.tcgplayer.com/product/${card.productId}`,
       marketPrice: latest.marketPrice,

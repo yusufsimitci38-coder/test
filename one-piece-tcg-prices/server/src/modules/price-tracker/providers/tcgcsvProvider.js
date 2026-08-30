@@ -83,6 +83,18 @@ function extendedField(product, patterns) {
   return null;
 }
 
+// Card numbers are formatted like "OP13-001", "EB04-036", "ST01-001" - the
+// part before the dash is the short set code players actually search by
+// (OP17, EB04, ...), which is more reliable for this than the group's own
+// abbreviation field (not consistently present, and the full group name
+// like "OP-13 The Three Captains" isn't the compact code people expect).
+function deriveSetCode(number, group) {
+  if (number && number.includes('-')) {
+    return number.split('-')[0].trim().toUpperCase();
+  }
+  return group.abbreviation || null;
+}
+
 function pickGroups(groups, watchlistConfig) {
   const sorted = [...groups].sort((a, b) => {
     const ap = a.publishedOn ? Date.parse(a.publishedOn) : 0;
@@ -138,13 +150,20 @@ async function fetchWatchlistPrices(watchlistConfig) {
       const price = priceByProduct.get(product.productId);
       if (!price) continue; // no listing/price data for this product right now
 
+      const number = extendedField(product, [/number/i]);
+
       cards.push({
         productId: product.productId,
         name: product.name,
         setName: group.name,
         setId: group.groupId,
-        number: extendedField(product, [/number/i]),
+        setCode: deriveSetCode(number, group),
+        number,
         rarity: extendedField(product, [/rarity/i]),
+        // One Piece cards can be dual-color (e.g. "Red/Green"); kept as the
+        // raw string tcgcsv reports rather than split, so the filter list
+        // shows combos as their own entries instead of guessing a split.
+        color: extendedField(product, [/^color$/i, /color/i]),
         imageUrl: product.imageUrl || `https://tcgplayer-cdn.tcgplayer.com/product/${product.productId}_200w.jpg`,
         url: product.url || `https://www.tcgplayer.com/product/${product.productId}`,
         marketPrice: numOrNull(price.marketPrice),

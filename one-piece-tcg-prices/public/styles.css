@@ -169,7 +169,17 @@ main {
 
 .card-name { font-size: 0.95rem; margin: 0; line-height: 1.2; }
 
-.card-set { font-size: 0.75rem; color: var(--muted); margin: 0; }
+.card-set { font-size: 0.75rem; color: var(--muted); margin: 0; display: flex; align-items: center; gap: 0.35rem; }
+
+.color-dot {
+  width: 0.6rem;
+  height: 0.6rem;
+  border-radius: 50%;
+  flex-shrink: 0;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+}
+
+.color-dot[hidden] { display: none; }
 
 .price-row { display: flex; align-items: baseline; gap: 0.5rem; }
 

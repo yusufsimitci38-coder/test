@@ -26,11 +26,25 @@
         <label><input type="checkbox" id="alerts-only" /> Alerts only</label>
       </div>
       <div class="filter-group">
+        <label for="color-select">Color</label>
+        <select id="color-select">
+          <option value="">All colors</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label for="set-select">Set</label>
+        <select id="set-select">
+          <option value="">All sets</option>
+        </select>
+      </div>
+      <div class="filter-group">
         <label for="sort-select">Sort by</label>
         <select id="sort-select">
           <option value="pctChange">Biggest % change</option>
           <option value="price">Highest price</option>
           <option value="name">Name</option>
+          <option value="color">Color</option>
+          <option value="set">Set</option>
         </select>
       </div>
       <div class="threshold-note" id="threshold-note"></div>
@@ -49,7 +63,10 @@
       </div>
       <div class="card-body">
         <h3 class="card-name"></h3>
-        <p class="card-set"></p>
+        <p class="card-set">
+          <span class="color-dot" hidden></span>
+          <span class="card-set-text"></span>
+        </p>
         <div class="price-row">
           <span class="current-price"></span>
           <span class="pct-change"></span>

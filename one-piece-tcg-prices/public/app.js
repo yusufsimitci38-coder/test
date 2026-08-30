@@ -4,11 +4,36 @@ const el = {
   statusText: document.getElementById('status-text'),
   refreshBtn: document.getElementById('refresh-btn'),
   alertsOnly: document.getElementById('alerts-only'),
+  colorSelect: document.getElementById('color-select'),
+  setSelect: document.getElementById('set-select'),
   sortSelect: document.getElementById('sort-select'),
   thresholdNote: document.getElementById('threshold-note'),
   container: document.getElementById('cards-container'),
   template: document.getElementById('card-template'),
 };
+
+// Best-effort CSS color for each One Piece TCG color name, used for the
+// small swatch dot on each card. A dual-color card (e.g. "Blue/Purple")
+// gets a two-color gradient split down the middle; anything unrecognized
+// falls back to a neutral gray rather than guessing.
+const COLOR_SWATCHES = {
+  red: '#e0433d',
+  green: '#2f9e5c',
+  blue: '#2f7de0',
+  purple: '#8a4fd1',
+  black: '#3a3a3a',
+  yellow: '#e0c22f',
+};
+
+function swatchCss(colorName) {
+  const parts = (colorName || '')
+    .split('/')
+    .map((p) => COLOR_SWATCHES[p.trim().toLowerCase()])
+    .filter(Boolean);
+  if (!parts.length) return null;
+  if (parts.length === 1) return parts[0];
+  return `linear-gradient(90deg, ${parts[0]} 50%, ${parts[1]} 50%)`;
+}
 
 function fmtMoney(v) {
   return v == null ? '—' : `$${v.toFixed(2)}`;
@@ -65,11 +90,38 @@ async function loadStatus() {
   }
 }
 
+function fillSelect(select, options, currentValue) {
+  const previous = currentValue ?? select.value;
+  // Keep the first option (the "All ..." default) and replace the rest.
+  select.length = 1;
+  for (const opt of options) {
+    const el2 = document.createElement('option');
+    el2.value = opt.value;
+    el2.textContent = opt.label;
+    select.appendChild(el2);
+  }
+  if ([...select.options].some((o) => o.value === previous)) {
+    select.value = previous;
+  }
+}
+
+async function loadFacets() {
+  try {
+    const facets = await fetchJson(`${API}/facets`);
+    fillSelect(el.colorSelect, facets.colors.map((c) => ({ value: c, label: c })));
+    fillSelect(el.setSelect, facets.sets.map((s) => ({ value: s.code, label: `${s.code} — ${s.name}` })));
+  } catch (err) {
+    console.error('Failed to load filter options:', err);
+  }
+}
+
 async function loadCards() {
   el.container.innerHTML = '<p class="empty-state">Loading cards…</p>';
   const params = new URLSearchParams({
     alertsOnly: el.alertsOnly.checked,
     sort: el.sortSelect.value,
+    color: el.colorSelect.value,
+    setCode: el.setSelect.value,
   });
 
   let cards;
@@ -108,7 +160,16 @@ function renderCard(card) {
 
   node.querySelector('.alert-badge').hidden = !card.alert;
   node.querySelector('.card-name').textContent = card.name;
-  node.querySelector('.card-set').textContent = `${card.setName}${card.number ? ` · ${card.number}` : ''}`;
+  node.querySelector('.card-set-text').textContent = `${card.setName}${card.number ? ` · ${card.number}` : ''}`;
+
+  const dot = node.querySelector('.color-dot');
+  const swatch = swatchCss(card.color);
+  if (swatch) {
+    dot.style.background = swatch;
+    dot.title = card.color;
+    dot.hidden = false;
+  }
+
   node.querySelector('.current-price').textContent = fmtMoney(card.currentPrice);
 
   const pctEl = node.querySelector('.pct-change');
@@ -152,7 +213,7 @@ async function refresh() {
   el.refreshBtn.textContent = 'Refreshing…';
   try {
     await fetch(`${API}/refresh`, { method: 'POST' });
-    await Promise.all([loadStatus(), loadCards()]);
+    await Promise.all([loadStatus(), loadFacets(), loadCards()]);
   } catch (err) {
     console.error(err);
     alert('Refresh failed. Check the server logs.');
@@ -165,6 +226,8 @@ async function refresh() {
 el.refreshBtn.addEventListener('click', refresh);
 el.alertsOnly.addEventListener('change', loadCards);
 el.sortSelect.addEventListener('change', loadCards);
+el.colorSelect.addEventListener('change', loadCards);
+el.setSelect.addEventListener('change', loadCards);
 
 loadStatus();
-loadCards();
+loadFacets().then(loadCards);

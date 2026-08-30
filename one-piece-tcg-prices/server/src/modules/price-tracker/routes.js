@@ -10,7 +10,13 @@ router.get('/status', (req, res) => {
 router.get('/cards', (req, res) => {
   const alertsOnly = req.query.alertsOnly === 'true';
   const sort = req.query.sort || 'pctChange';
-  res.json(priceService.getCards({ alertsOnly, sort }));
+  const color = req.query.color || '';
+  const setCode = req.query.setCode || '';
+  res.json(priceService.getCards({ alertsOnly, sort, color, setCode }));
+});
+
+router.get('/facets', (req, res) => {
+  res.json(priceService.getFacets());
 });
 
 router.get('/cards/:productId/history', (req, res) => {
