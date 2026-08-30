@@ -112,24 +112,24 @@ function pickGroups(groups, watchlistConfig) {
     return (b.groupId || 0) - (a.groupId || 0);
   });
 
+  // publishedOn can be in the future for presale/announced sets, which have
+  // no market data yet - fetching them just spends time and requests on
+  // cards that all get skipped for lack of a price. They'll naturally show
+  // up on their own once released, so both automatic modes skip them; an
+  // explicit named-sets pick is left alone since that's a deliberate choice.
+  const now = Date.now();
+  const released = sorted.filter((g) => !g.publishedOn || Date.parse(g.publishedOn) <= now);
+
   switch (watchlistConfig.mode) {
     case 'all-sets':
-      return sorted;
+      return released;
     case 'named-sets': {
       const wanted = new Set(watchlistConfig.setNames.map((n) => n.toLowerCase()));
       return sorted.filter((g) => wanted.has((g.name || '').toLowerCase()));
     }
     case 'recent-sets':
-    default: {
-      // publishedOn can be in the future for presale/announced sets, which
-      // otherwise sort ahead of everything actually released - a presale
-      // set has no market data yet, so picking it here mostly just fills a
-      // watchlist slot with cards that never get a price. "Recent" means
-      // the most recently *released* sets, so exclude anything not out yet.
-      const now = Date.now();
-      const released = sorted.filter((g) => !g.publishedOn || Date.parse(g.publishedOn) <= now);
+    default:
       return released.slice(0, watchlistConfig.recentSetCount);
-    }
   }
 }
 

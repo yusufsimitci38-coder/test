@@ -75,14 +75,22 @@ can see full functionality without waiting.
 | `ALERT_MIN_PRICE` | `4` | Minimum current price to be alert-eligible |
 | `ALERT_PCT_CHANGE` | `20` | Minimum absolute % move to alert on |
 | `LOOKBACK_DAYS` | `30` | Comparison window |
-| `WATCHLIST_MODE` | `recent-sets` | `recent-sets`, `all-sets`, or `named-sets` |
+| `WATCHLIST_MODE` | `all-sets` | `all-sets`, `recent-sets`, or `named-sets` |
 | `RECENT_SET_COUNT` | `8` | Sets tracked when mode is `recent-sets` |
 | `WATCHLIST_SET_NAMES` | *(empty)* | Comma-separated set names when mode is `named-sets` |
 | `REFRESH_CRON` | `0 13 * * *` | Daily refresh schedule (UTC, cron syntax) |
 | `ONEPIECE_CATEGORY_ID` | *(empty)* | Optional: skip the category lookup by hardcoding tcgcsv's One Piece categoryId |
 
-`all-sets` will track every One Piece set tcgcsv.com knows about (currently
-a few hundred cards) — fine, just slower per refresh and a bigger data file.
+`all-sets` (the default) tracks every group tcgcsv.com has for the category
+— currently around 90, spanning mainline boosters (100-180+ cards each),
+starter/structure decks, and release-event bonus packs, so expect several
+thousand cards total and a refresh that takes a couple of minutes rather
+than seconds. `recent-sets` is a faster, narrower alternative, but note
+tcgcsv weighs a small 11-card starter deck the same as a full booster when
+ranking by recency - a low `RECENT_SET_COUNT` can end up dominated by
+whatever small decks shipped most recently instead of covering more
+boosters. Use `GET /api/price-tracker/debug/fetch-summary` after a refresh
+to see exactly which groups were picked and their product/price counts.
 
 ## Using the official TCGPlayer API instead
 
@@ -99,7 +107,7 @@ tcgcsv.com is literally a cache of those same responses.
 ## Architecture
 
 ```
-one-piece-tcg-prices/
+.
 ├─ server/
 │  └─ src/
 │     ├─ modules/

@@ -14,7 +14,7 @@ const config = {
   lookbackDays: num(process.env.LOOKBACK_DAYS, 30),
 
   watchlist: {
-    mode: process.env.WATCHLIST_MODE || 'recent-sets',
+    mode: process.env.WATCHLIST_MODE || 'all-sets',
     recentSetCount: num(process.env.RECENT_SET_COUNT, 8),
     setNames: (process.env.WATCHLIST_SET_NAMES || '')
       .split(',')
