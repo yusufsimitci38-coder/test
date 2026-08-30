@@ -370,10 +370,20 @@ main {
 
 .reg-windows-note a { color: var(--accent); }
 
+#reg-windows-list {
+  overflow-x: auto;
+}
+
 .reg-table {
   width: 100%;
+  min-width: 720px;
   border-collapse: collapse;
   font-size: 0.85rem;
+}
+
+.reg-time-guideline {
+  color: var(--muted);
+  font-size: 0.75rem;
 }
 
 .reg-table th {

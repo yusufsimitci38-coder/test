@@ -178,8 +178,22 @@ async function loadRegistrationWindows() {
   renderRegistrationWindows();
 }
 
+// Parses the leading day out of a "March 21-22, 2026" / "June 6, 2026"
+// style range string, for sorting - not full parsing, just enough to order
+// entries chronologically. Returns Infinity (sorts last) on anything
+// unexpected, rather than throwing.
+function firstDateOf(rangeStr) {
+  const m = /^([A-Za-z]+)\s+(\d{1,2})(?:-\d{1,2})?,?\s*(\d{4})/.exec(rangeStr || '');
+  if (!m) return Infinity;
+  const parsed = new Date(`${m[1]} ${m[2]}, ${m[3]}`);
+  return Number.isNaN(parsed.getTime()) ? Infinity : parsed.getTime();
+}
+
 function renderRegistrationWindows() {
-  const windows = lastFetchedWindows.filter(isVisible);
+  const windows = lastFetchedWindows
+    .filter(isVisible)
+    .slice()
+    .sort((a, b) => firstDateOf(a.eventDate) - firstDateOf(b.eventDate));
 
   if (!windows.length) {
     evEl.regWindowsList.innerHTML = lastFetchedWindows.length
@@ -190,19 +204,41 @@ function renderRegistrationWindows() {
 
   evEl.regWindowsList.innerHTML = `
     <table class="reg-table">
-      <thead><tr><th>Event month</th><th>Applications open</th><th>Location</th><th>Season</th></tr></thead>
+      <thead>
+        <tr>
+          <th>Region</th>
+          <th>Organizer</th>
+          <th>Event date</th>
+          <th>Venue</th>
+          <th>Registration opens</th>
+          <th>Register</th>
+        </tr>
+      </thead>
       <tbody>
         ${windows
-          .map(
-            (w) => `
+          .map((w) => {
+            const opens = w.registrationOpensOn
+              ? `${escapeHtml(w.registrationOpensOn)}${
+                  w.registrationOpensTimeGuideline
+                    ? `<br /><span class="reg-time-guideline">~${escapeHtml(w.registrationOpensTimeGuideline)} (guideline only - see link)</span>`
+                    : ''
+                }`
+              : '—';
+            return `
           <tr>
-            <td>${escapeHtml(w.eventMonth)}</td>
-            <td>${escapeHtml(w.applicationOpensOn)}</td>
-            <td>${w.location ? escapeHtml(w.location) : '—'}</td>
-            <td><a href="${w.sourceUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(w.season)}</a></td>
+            <td>${w.region ? escapeHtml(w.region) : '—'}</td>
+            <td>${escapeHtml(w.organizer || w.season || '')}</td>
+            <td>${escapeHtml(w.eventDate || '—')}</td>
+            <td>${w.venue ? escapeHtml(w.venue) : '—'}</td>
+            <td>${opens}</td>
+            <td>${
+              w.registrationUrl
+                ? `<a href="${w.registrationUrl}" target="_blank" rel="noopener noreferrer">Register ↗</a>`
+                : `<a href="${w.sourceUrl}" target="_blank" rel="noopener noreferrer">Official page ↗</a>`
+            }</td>
           </tr>
-        `
-          )
+        `;
+          })
           .join('')}
       </tbody>
     </table>

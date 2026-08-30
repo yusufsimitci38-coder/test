@@ -152,7 +152,7 @@ is a client-side toggle only: all events and windows are always fetched and
 stored regardless of its state, so switching it just re-renders from the data
 already in the browser (no extra request).
 
-### Registration/"application open" windows
+### Registration windows
 
 No third-party source publishes these at all - checked RK9, TopDeck.gg,
 gumgum.gg, and OPlayTCG; a paid wrapper called Parse.bot exists specifically
@@ -160,12 +160,25 @@ gumgum.gg, and OPlayTCG; a paid wrapper called Parse.bot exists specifically
 API or documented data feed." So this is scraped, best-effort, straight from
 Bandai's own regional-season pages
 (`server/src/modules/event-tracker/bandaiRegistration.js`) and shown as a
-small table under the calendar - by event month, not per specific event,
-since that's the granularity Bandai itself publishes this at. Each row also
-carries a best-effort `location` and `isEnglishSpeaking`, taken from whichever
-region heading (e.g. "USA & Canada") the extractor last saw on the page before
-that row's date - see [Region filter](#region-filter-english-speaking-events)
-above for how the flag itself is computed and used.
+table under the calendar, sorted chronologically by event date.
+
+Confirmed against the real page (via the debug endpoint below, checked
+against the live deployment): under "Event Schedule and Tournament
+Organizer", each region (North America / Europe / Oceania / Latin America)
+lists its own Regionals as "`<Organizer>` Date: `<range>` Venue: `<address>`
+Link: `<registration URL>`" - so each row gets an exact venue and a direct
+registration link, not just a region name. A separate "Application Period"
+section gives the date each event month's registration opens (e.g. "For
+March Events: Starts December 28, 2025") plus a guideline time-of-day per
+region (e.g. "North America: 9:00am PT / 12:00pm ET") - the page itself
+flags this time as a guideline only, since the exact time is set by each
+third-party tournament organizer, which is why every row also links straight
+to that organizer's own registration page to confirm it. Each row's
+`isEnglishSpeaking` (see [Region filter](#region-filter-english-speaking-events)
+above) is computed from its venue text specifically, not the broader region
+name - "Latin America"/"North America" both contain the substring "america",
+which would otherwise false-positive-match the English-speaking marker list
+before a Mexico or Brazil venue is ever checked.
 
 This is meaningfully more fragile than the JSON-based providers: it depends
 on regexing plain text extracted from the page rather than a stable API
@@ -178,9 +191,7 @@ got parsed out of it), which is the fastest way to fix the regex in
 from what it currently expects. It also returns a `debugSample` - the same
 page, but with table row/cell boundaries (`@@ROW@@`/`@@CELL@@`) and link
 targets (`@@LINK:href@@`) marked inline - for figuring out the real page
-structure (e.g. whether registration dates actually live in a per-event
-table with their own venue/link columns) when the plain-text extraction
-alone isn't enough to tell.
+structure when the plain-text extraction alone isn't enough to tell.
 
 ## Architecture
 
