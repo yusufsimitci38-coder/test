@@ -3,6 +3,7 @@ const EVENT_API = '/api/event-tracker';
 const evEl = {
   statusText: document.getElementById('event-status-text'),
   refreshBtn: document.getElementById('event-refresh-btn'),
+  showNonEnglish: document.getElementById('show-non-english'),
   grid: document.getElementById('calendar-grid'),
   monthLabel: document.getElementById('cal-month-label'),
   prevBtn: document.getElementById('cal-prev'),
@@ -16,6 +17,8 @@ const evEl = {
 
 let currentMonth = new Date(); // day-of-month is irrelevant, only year/month used
 let eventsLoadedOnce = false;
+let lastFetchedEvents = [];
+let lastFetchedWindows = [];
 
 async function fetchJsonEv(url) {
   const res = await fetch(url);
@@ -36,6 +39,12 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
+// isEnglishSpeaking defaults to visible (true) when missing/undefined, so
+// older cached data or an unexpected shape never silently hides everything.
+function isVisible(item) {
+  return evEl.showNonEnglish.checked || item.isEnglishSpeaking !== false;
+}
+
 async function loadEventStatus() {
   try {
     const status = await fetchJsonEv(`${EVENT_API}/status`);
@@ -53,19 +62,20 @@ async function loadCalendar() {
   evEl.grid.innerHTML = '<p class="empty-state">Loading events…</p>';
   evEl.dayDetail.hidden = true;
 
-  let events;
   try {
-    events = await fetchJsonEv(`${EVENT_API}/events?month=${monthKey(currentMonth)}`);
+    lastFetchedEvents = await fetchJsonEv(`${EVENT_API}/events?month=${monthKey(currentMonth)}`);
   } catch (err) {
     console.error('Failed to load events:', err);
     evEl.grid.innerHTML = `<p class="empty-state">Couldn't load events: ${err.message}<br />Check the server logs, or try "Refresh now".</p>`;
     return;
   }
 
-  renderGrid(events);
+  renderGrid();
 }
 
-function renderGrid(events) {
+function renderGrid() {
+  const events = lastFetchedEvents.filter(isVisible);
+
   const byDay = new Map(); // 'YYYY-MM-DD' -> event[]
   for (const e of events) {
     if (!e.date) continue;
@@ -119,6 +129,8 @@ function renderGrid(events) {
   evEl.grid.querySelectorAll('.cal-cell[data-day]').forEach((cell) => {
     cell.addEventListener('click', () => showDayDetail(cell.dataset.day, byDay.get(cell.dataset.day) || []));
   });
+
+  evEl.dayDetail.hidden = true;
 }
 
 function showDayDetail(dayStr, events) {
@@ -157,34 +169,44 @@ function showDayDetail(dayStr, events) {
 async function loadRegistrationWindows() {
   try {
     const data = await fetchJsonEv(`${EVENT_API}/registration-windows`);
-    const windows = data.windows || [];
-    if (!windows.length) {
-      evEl.regWindowsList.innerHTML =
-        '<p class="empty-state">None found yet — check back after the next refresh, or verify directly on the official page above.</p>';
-      return;
-    }
-    evEl.regWindowsList.innerHTML = `
-      <table class="reg-table">
-        <thead><tr><th>Event month</th><th>Applications open</th><th>Season</th></tr></thead>
-        <tbody>
-          ${windows
-            .map(
-              (w) => `
-            <tr>
-              <td>${escapeHtml(w.eventMonth)}</td>
-              <td>${escapeHtml(w.applicationOpensOn)}</td>
-              <td><a href="${w.sourceUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(w.season)}</a></td>
-            </tr>
-          `
-            )
-            .join('')}
-        </tbody>
-      </table>
-    `;
+    lastFetchedWindows = data.windows || [];
   } catch (err) {
     console.error('Failed to load registration windows:', err);
     evEl.regWindowsList.innerHTML = `<p class="empty-state">Couldn't load registration windows: ${err.message}</p>`;
+    return;
   }
+  renderRegistrationWindows();
+}
+
+function renderRegistrationWindows() {
+  const windows = lastFetchedWindows.filter(isVisible);
+
+  if (!windows.length) {
+    evEl.regWindowsList.innerHTML = lastFetchedWindows.length
+      ? '<p class="empty-state">All found windows are hidden by the region filter above.</p>'
+      : '<p class="empty-state">None found yet — check back after the next refresh, or verify directly on the official page above.</p>';
+    return;
+  }
+
+  evEl.regWindowsList.innerHTML = `
+    <table class="reg-table">
+      <thead><tr><th>Event month</th><th>Applications open</th><th>Location</th><th>Season</th></tr></thead>
+      <tbody>
+        ${windows
+          .map(
+            (w) => `
+          <tr>
+            <td>${escapeHtml(w.eventMonth)}</td>
+            <td>${escapeHtml(w.applicationOpensOn)}</td>
+            <td>${w.location ? escapeHtml(w.location) : '—'}</td>
+            <td><a href="${w.sourceUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(w.season)}</a></td>
+          </tr>
+        `
+          )
+          .join('')}
+      </tbody>
+    </table>
+  `;
 }
 
 async function refreshEvents() {
@@ -213,6 +235,11 @@ evEl.nextBtn.addEventListener('click', () => changeMonth(1));
 evEl.todayBtn.addEventListener('click', () => {
   currentMonth = new Date();
   loadCalendar();
+});
+// Toggling re-renders from the already-fetched lists - no need to re-fetch.
+evEl.showNonEnglish.addEventListener('change', () => {
+  renderGrid();
+  renderRegistrationWindows();
 });
 
 // Loaded lazily the first time the Event Tracker tab is opened (see nav.js),

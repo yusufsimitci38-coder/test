@@ -3,6 +3,8 @@
 // unreachable. Dates are generated relative to "today" so the calendar
 // always has something to show regardless of when this runs.
 
+const { isEnglishSpeaking } = require('../regionClassifier');
+
 function daysFromNow(offset, hour = 18, minute = 0) {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + offset);
@@ -33,6 +35,7 @@ async function fetchEvents() {
     organizer: e.organizer,
     players: e.players,
     location: e.location,
+    isEnglishSpeaking: isEnglishSpeaking(`${e.name} ${e.location || ''}`),
     url: `https://play.limitlesstcg.com/tournament/${e.id}/details`,
   }));
 }

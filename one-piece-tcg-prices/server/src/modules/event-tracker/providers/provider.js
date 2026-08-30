@@ -9,6 +9,7 @@
 //     organizer: string | null,
 //     players: number | null, // registered/participating player count, if known
 //     location: string | null, // venue/city/etc, best-effort - may be null
+//     isEnglishSpeaking: boolean, // best-effort region classification (see regionClassifier.js) - defaults true when unknown
 //     url: string | null,     // link back to the event's page on the source site
 //   }
 //

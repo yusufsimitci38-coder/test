@@ -10,6 +10,7 @@
 // details for that specific event.
 
 const { version } = require('../../../../package.json');
+const { isEnglishSpeaking } = require('../regionClassifier');
 
 const BASE = 'https://play.limitlesstcg.com/api';
 const USER_AGENT = `OnePieceTCGToolkit/${version || '0.0.0'}`;
@@ -50,6 +51,7 @@ function normalizeEvent(raw) {
     organizer: raw.organizer || null,
     players: typeof raw.players === 'number' ? raw.players : null,
     location: null, // filled in best-effort by enrichWithLocations, if the details endpoint guess works
+    isEnglishSpeaking: true, // recomputed once location is known; see fetchEvents
     url: `https://play.limitlesstcg.com/tournament/${raw.id}/details`,
   };
 }
@@ -154,6 +156,9 @@ async function fetchEvents() {
 
   const events = [...merged.values()];
   await enrichWithLocations(events);
+  for (const event of events) {
+    event.isEnglishSpeaking = isEnglishSpeaking(`${event.name} ${event.location || ''}`);
+  }
   return events;
 }
 

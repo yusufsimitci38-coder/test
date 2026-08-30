@@ -138,6 +138,20 @@ price tracker. `EVENT_PROVIDER=mock` gives deterministic sample events
 straight from Limitless - including a details-endpoint lookup on a real
 tournament id - for checking its actual field shape.
 
+### Region filter (English-speaking events)
+
+Each event and registration window also gets a best-effort `isEnglishSpeaking`
+flag (`server/src/modules/event-tracker/regionClassifier.js`), computed from
+its name/location text against a small curated list of English-speaking vs.
+non-English-speaking country names. There's no authoritative source for this,
+so it defaults to `true` (visible) for anything ambiguous or missing location
+data - the "Show non-English-speaking events & windows" checkbox on the Event
+Tracker tab can only ever *hide* entries it's reasonably confident about,
+never silently hide ones it just lacks good location data for. The checkbox
+is a client-side toggle only: all events and windows are always fetched and
+stored regardless of its state, so switching it just re-renders from the data
+already in the browser (no extra request).
+
 ### Registration/"application open" windows
 
 No third-party source publishes these at all - checked RK9, TopDeck.gg,
@@ -147,7 +161,11 @@ API or documented data feed." So this is scraped, best-effort, straight from
 Bandai's own regional-season pages
 (`server/src/modules/event-tracker/bandaiRegistration.js`) and shown as a
 small table under the calendar - by event month, not per specific event,
-since that's the granularity Bandai itself publishes this at.
+since that's the granularity Bandai itself publishes this at. Each row also
+carries a best-effort `location` and `isEnglishSpeaking`, taken from whichever
+region heading (e.g. "USA & Canada") the extractor last saw on the page before
+that row's date - see [Region filter](#region-filter-english-speaking-events)
+above for how the flag itself is computed and used.
 
 This is meaningfully more fragile than the JSON-based providers: it depends
 on regexing plain text extracted from the page rather than a stable API
