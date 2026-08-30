@@ -6,15 +6,28 @@
 // to swap in the official API if you do have credentials.)
 
 const config = require('../../../config');
+const { version } = require('../../../../package.json');
 
 const BASE = 'https://tcgcsv.com/tcgplayer';
 const ONE_PIECE_NAME_RE = /one piece/i;
+// tcgcsv.com's docs (tcgcsv.com/docs) say requests with a generic or missing
+// User-Agent may be rejected (this is what was showing up as an HTTP 401),
+// and ask callers to identify themselves and keep request volume modest.
+const USER_AGENT = `OnePieceTCGToolkit/${version || '0.0.0'}`;
+const BETWEEN_REQUESTS_MS = 150;
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 async function fetchJson(url) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
-    const res = await fetch(url, { signal: controller.signal });
+    const res = await fetch(url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
+    });
     if (!res.ok) {
       throw new Error(`${url} -> HTTP ${res.status}`);
     }
@@ -97,7 +110,9 @@ async function fetchWatchlistPrices(watchlistConfig) {
   const groups = pickGroups(allGroups, watchlistConfig);
 
   const cards = [];
-  for (const group of groups) {
+  for (const [index, group] of groups.entries()) {
+    if (index > 0) await sleep(BETWEEN_REQUESTS_MS);
+
     let products, prices;
     try {
       [products, prices] = await Promise.all([
