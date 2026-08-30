@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>One Piece TCG Toolkit</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>One Piece TCG Toolkit</h1>
+    <nav class="tabs">
+      <button class="tab active" type="button">Price Tracker</button>
+      <button class="tab disabled" type="button" disabled title="Coming later">Event Tracker <span class="soon">soon</span></button>
+    </nav>
+  </header>
+
+  <main>
+    <section class="status-bar" id="status-bar">
+      <div id="status-text">Loading status…</div>
+      <button id="refresh-btn" type="button">Refresh now</button>
+    </section>
+
+    <section class="controls">
+      <div class="filter-group">
+        <label><input type="checkbox" id="alerts-only" /> Alerts only</label>
+      </div>
+      <div class="filter-group">
+        <label for="sort-select">Sort by</label>
+        <select id="sort-select">
+          <option value="pctChange">Biggest % change</option>
+          <option value="price">Highest price</option>
+          <option value="name">Name</option>
+        </select>
+      </div>
+      <div class="threshold-note" id="threshold-note"></div>
+    </section>
+
+    <section id="cards-container" class="cards-grid" aria-live="polite">
+      <p class="empty-state">Loading cards…</p>
+    </section>
+  </main>
+
+  <template id="card-template">
+    <article class="card">
+      <div class="card-img-wrap">
+        <img class="card-img" alt="" />
+        <span class="alert-badge" hidden>⚠ ALERT</span>
+      </div>
+      <div class="card-body">
+        <h3 class="card-name"></h3>
+        <p class="card-set"></p>
+        <div class="price-row">
+          <span class="current-price"></span>
+          <span class="pct-change"></span>
+        </div>
+        <p class="price-past"></p>
+        <svg class="sparkline" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+        <a class="tcg-link" target="_blank" rel="noopener noreferrer">View on TCGPlayer ↗</a>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+</body>
+</html>
