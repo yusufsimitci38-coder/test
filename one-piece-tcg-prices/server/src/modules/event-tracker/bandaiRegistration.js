@@ -115,8 +115,20 @@ function sliceSection(text, startHeading, endHeading) {
 
 const KNOWN_REGIONS = ['North America', 'Europe', 'Oceania', 'Latin America'];
 
+// Captures the whole "Venue: ..." (or label-less) blob between the date and
+// "Link:" as one group, rather than requiring an inline optional "Venue:"
+// match immediately after the date - real-page evidence showed the literal
+// "Venue:" label sometimes not immediately adjacent to the date (cause
+// unconfirmed, since this sandbox can't fetch the raw HTML directly), which
+// made the old inline-optional-group version inconsistently fail to strip
+// it. Stripping the label as post-processing (see stripVenueLabel) is
+// robust to that regardless of the underlying cause.
 const EVENT_ENTRY_RE =
-  /^\s*Date:\s*([A-Za-z]+\s+\d{1,2}(?:-\d{1,2})?,?\s*\d{4})\s*(?:Venue:\s*)?(.*?)\s*Link:\s*@@LINK:([^@]+)@@/;
+  /^\s*Date:\s*([A-Za-z]+\s+\d{1,2}(?:-\d{1,2})?,?\s*\d{4})\s*(.*?)\s*Link:\s*@@LINK:([^@]+)@@/;
+
+function stripVenueLabel(text) {
+  return text.trim().replace(/^Venue:\s*/i, '').trim();
+}
 
 // Parses the "Event Schedule and Tournament Organizer" section: each
 // organizer heading immediately followed by "Date: ... [Venue: ...] Link:
@@ -133,14 +145,15 @@ function extractRegionalEvents(scheduleText, monthToOpenDate, timeGuideline, sea
     const match = following.match(EVENT_ENTRY_RE);
 
     if (match) {
-      const [, eventDate, venue, registrationUrl] = match;
+      const [, eventDate, rawVenue, registrationUrl] = match;
+      const venue = stripVenueLabel(rawVenue);
       const monthMatch = eventDate.match(/^[A-Za-z]+/);
       const monthKey = monthMatch ? monthMatch[0].toLowerCase() : null;
       events.push({
         organizer: heading,
         region: currentRegion,
         eventDate: eventDate.replace(/\s+/g, ' ').trim(),
-        venue: venue.trim() || null,
+        venue: venue || null,
         registrationOpensOn: (monthKey && monthToOpenDate[monthKey]) || null,
         registrationOpensTimeGuideline: (currentRegion && timeGuideline[currentRegion]) || null,
         registrationUrl: registrationUrl || null,
