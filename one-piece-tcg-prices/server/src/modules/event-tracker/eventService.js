@@ -5,7 +5,23 @@ const bandaiRegistration = require('./bandaiRegistration');
 const topdeckProvider = require('./providers/topdeckProvider');
 const { mergeEvents } = require('./mergeEvents');
 
+// Guards against two refreshes running at once - e.g. the automatic
+// first-boot refresh (server/src/index.js) overlapping with a user-clicked
+// "Refresh now" right after a redeploy, which would double the request
+// volume against both Limitless and TopDeck and make rate limiting worse,
+// not better. A second caller gets back the same in-flight result instead
+// of kicking off its own concurrent refresh.
+let refreshInFlight = null;
+
 async function refreshEvents() {
+  if (refreshInFlight) return refreshInFlight;
+  refreshInFlight = doRefreshEvents().finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
+async function doRefreshEvents() {
   const provider = getProvider();
   const primaryEvents = await provider.fetchEvents();
 

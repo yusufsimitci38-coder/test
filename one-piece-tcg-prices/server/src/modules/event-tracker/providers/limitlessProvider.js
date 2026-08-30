@@ -36,7 +36,18 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchJson(path, attempt = 0) {
+// retries defaults to MAX_429_RETRIES for the two listing endpoints, where
+// a single successful retry is worth the wait (especially for "upcoming" -
+// see fetchEvents). fetchTournamentDetails explicitly passes retries: 0:
+// that call site already has its own graceful degradation (best-effort,
+// gives up after a handful of failures, never blocks the refresh), tuned
+// assuming a failed detail lookup fails *fast* - stacking a multi-second
+// retry-with-backoff onto every one of its up-to-200 sequential requests
+// (should Limitless still be rate-limiting at that point) turned what was
+// a bounded ~30s best-effort pass into something that could run for
+// minutes, which is what made refreshes appear to hang after this retry
+// logic was first added.
+async function fetchJson(path, retries = MAX_429_RETRIES, attempt = 0) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
@@ -44,15 +55,15 @@ async function fetchJson(path, attempt = 0) {
       signal: controller.signal,
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
     });
-    if (res.status === 429 && attempt < MAX_429_RETRIES) {
+    if (res.status === 429 && attempt < retries) {
       clearTimeout(timeout);
       const retryAfterHeader = Number(res.headers.get('retry-after'));
       const delay = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
         ? retryAfterHeader * 1000
         : RETRY_BASE_DELAY_MS * 2 ** attempt;
-      console.warn(`[limitless] rate limited on ${path}, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_429_RETRIES})`);
+      console.warn(`[limitless] rate limited on ${path}, retrying in ${delay}ms (attempt ${attempt + 1}/${retries})`);
       await sleep(delay);
-      return fetchJson(path, attempt + 1);
+      return fetchJson(path, retries, attempt + 1);
     }
     if (!res.ok) {
       throw new Error(`${BASE}${path} -> HTTP ${res.status}`);
@@ -124,7 +135,7 @@ async function fetchTournamentDetails(id) {
   const pathsToTry = workingDetailPath ? [workingDetailPath] : DETAIL_PATH_CANDIDATES;
   for (const pathFn of pathsToTry) {
     try {
-      const raw = await fetchJson(pathFn(id));
+      const raw = await fetchJson(pathFn(id), 0); // no retry - see fetchJson's comment
       workingDetailPath = pathFn;
       return raw;
     } catch (err) {
