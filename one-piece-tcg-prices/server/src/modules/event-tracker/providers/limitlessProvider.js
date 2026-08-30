@@ -46,10 +46,12 @@ function normalizeEvent(raw) {
   };
 }
 
-async function fetchEvents() {
+// Paginates through one listing path (e.g. "/tournaments" or
+// "/tournaments/upcoming") until a short page signals the end.
+async function fetchAllPages(basePath) {
   const events = [];
   for (let page = 1; page <= MAX_PAGES; page += 1) {
-    const batch = await fetchJson(`/tournaments?game=${GAME}&limit=${PAGE_SIZE}&page=${page}`);
+    const batch = await fetchJson(`${basePath}?game=${GAME}&limit=${PAGE_SIZE}&page=${page}`);
     const list = Array.isArray(batch) ? batch : Array.isArray(batch?.tournaments) ? batch.tournaments : [];
     if (!list.length) break;
     events.push(...list.map(normalizeEvent).filter(Boolean));
@@ -58,12 +60,43 @@ async function fetchEvents() {
   return events;
 }
 
+async function fetchEvents() {
+  // The plain listing appears biased toward already-*held* tournaments
+  // (Limitless is fundamentally a results database - its webhooks fire
+  // "when a tournament ends", not when one opens for registration), so a
+  // forward-looking calendar also needs the site's separate "upcoming"
+  // listing, mirroring the distinct /tournaments/upcoming page on the
+  // website itself. Merged by id so a calendar month works whether you're
+  // looking at the past or the future.
+  const merged = new Map();
+  for (const e of await fetchAllPages('/tournaments')) merged.set(e.id, e);
+
+  try {
+    for (const e of await fetchAllPages('/tournaments/upcoming')) merged.set(e.id, e);
+  } catch (err) {
+    // Best-effort: if this path guess turns out wrong, don't take down the
+    // whole refresh over it - past events from the call above still work.
+    console.warn(`[limitless] couldn't fetch upcoming tournaments (${err.message}); showing past events only`);
+  }
+
+  return [...merged.values()];
+}
+
 // Diagnostic only (not part of the shared provider contract): raw,
-// untransformed sample of what the API actually returns, for checking the
-// real field shape - used by GET /api/event-tracker/debug/sample.
+// untransformed sample from both listing paths, for checking the real
+// field shape and confirming which paths actually work - used by
+// GET /api/event-tracker/debug/sample.
 async function fetchSampleRaw() {
-  const batch = await fetchJson(`/tournaments?game=${GAME}&limit=3`);
-  return { url: `${BASE}/tournaments?game=${GAME}&limit=3`, raw: batch };
+  const [plain, upcoming] = await Promise.allSettled([
+    fetchJson(`/tournaments?game=${GAME}&limit=3`),
+    fetchJson(`/tournaments/upcoming?game=${GAME}&limit=3`),
+  ]);
+  const describe = (result) =>
+    result.status === 'fulfilled' ? { ok: true, raw: result.value } : { ok: false, error: result.reason.message };
+  return {
+    plain: describe(plain),
+    upcoming: describe(upcoming),
+  };
 }
 
 module.exports = { fetchEvents, fetchSampleRaw };
