@@ -2,10 +2,24 @@ const config = require('../../config');
 const db = require('../../db');
 const { getProvider } = require('./providers');
 const bandaiRegistration = require('./bandaiRegistration');
+const topdeckProvider = require('./providers/topdeckProvider');
+const { mergeEvents } = require('./mergeEvents');
 
 async function refreshEvents() {
   const provider = getProvider();
-  const events = await provider.fetchEvents();
+  const primaryEvents = await provider.fetchEvents();
+
+  // Optional second source (see providers/topdeckProvider.js) - a no-op
+  // returning [] when TOPDECK_API_KEY isn't configured. Best-effort and
+  // independent of the primary fetch: a failure here must never take down
+  // the regular event refresh.
+  let events = primaryEvents;
+  try {
+    const topdeckEvents = await topdeckProvider.fetchEvents();
+    if (topdeckEvents.length) events = mergeEvents(primaryEvents, topdeckEvents);
+  } catch (err) {
+    console.warn('[event-tracker] TopDeck merge failed:', err.message);
+  }
 
   for (const event of events) {
     if (event.id) db.upsertEvent(event);
@@ -66,6 +80,10 @@ async function debugBandaiRaw() {
   return bandaiRegistration.fetchRawText();
 }
 
+async function debugTopdeckRaw() {
+  return topdeckProvider.fetchSampleRaw();
+}
+
 module.exports = {
   refreshEvents,
   getEvents,
@@ -73,4 +91,5 @@ module.exports = {
   getStatus,
   debugSample,
   debugBandaiRaw,
+  debugTopdeckRaw,
 };

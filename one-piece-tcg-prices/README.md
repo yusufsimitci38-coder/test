@@ -138,6 +138,42 @@ price tracker. `EVENT_PROVIDER=mock` gives deterministic sample events
 straight from Limitless - including a details-endpoint lookup on a real
 tournament id - for checking its actual field shape.
 
+### Second event source: TopDeck.gg (optional)
+
+Limitless already merges its own `/tournaments/upcoming` listing (above),
+but a Limitless tournament page typically isn't created until shortly
+before the event happens - so far-out local tournaments can be genuinely
+absent from it for weeks, not just hidden by a filter. Regionals are
+already covered much further out via the
+[Regional Registration Windows](#registration-windows) table below the
+calendar (deliberately kept as its own separate section, since a Regional
+is a different scale/style of event from a weekly local) - this second
+source is about *locals and weeklies* specifically, run by stores that use
+[TopDeck.gg](https://topdeck.gg)'s tournament software.
+`server/src/modules/event-tracker/providers/topdeckProvider.js` merges its
+tournaments into the same calendar via `mergeEvents.js`, which best-effort
+de-dupes likely-same-event entries (same calendar day, plus either a
+matching venue substring or ≥50% word overlap in the name) between the two
+sources - errs toward keeping two entries rather than risking collapsing
+two genuinely different events into one, since a wrongly-kept duplicate is
+harmless but a wrongly-merged pair silently hides a real event. Where a
+duplicate is found, whichever source is missing a field (location, players,
+format, organizer) gets it filled in from the other - never overwrites a
+value the primary source already had.
+
+Opt-in and additive only: unset `TOPDECK_API_KEY` (a free key from
+[topdeck.gg/developers](https://topdeck.gg/developers)) and this is skipped
+entirely, with no error - nothing else depends on it. Everything about the
+real request/response shape in `topdeckProvider.js` (the `game` filter
+value, response envelope, field names, timestamp units) is a best-effort
+reconstruction from TopDeck's docs page and search-indexed snippets of it,
+same as Bandai's registration-window scraping - this sandbox's network
+egress is blocked from `topdeck.gg` itself (confirmed by a direct probe,
+even with a real key), so none of it is verified against a live response
+yet. `GET /api/event-tracker/debug/topdeck-sample` returns the raw
+request/response (or error) once `TOPDECK_API_KEY` is set, for correcting
+those guesses against real evidence.
+
 ### Region filter (English-speaking events)
 
 Each event and registration window also gets a best-effort `isEnglishSpeaking`
@@ -261,5 +297,6 @@ only file that would need to change for both modules to move with it.
 | `GET /api/event-tracker/events?month=YYYY-MM` | Events in a given month, sorted chronologically (omit `month` for the full list) |
 | `POST /api/event-tracker/refresh` | Trigger an immediate event fetch |
 | `GET /api/event-tracker/debug/sample` | Raw, untransformed sample response straight from Limitless, for inspecting its actual field shape (limitless provider only) |
-| `GET /api/event-tracker/registration-windows` | Scraped Regional Championship registration-open dates, by event month (best-effort - see [Registration/"application open" windows](#registrationapplication-open-windows)) |
+| `GET /api/event-tracker/debug/topdeck-sample` | Raw TopDeck.gg request/response (or error), for checking its actual field shape once `TOPDECK_API_KEY` is set - see [Second event source: TopDeck.gg](#second-event-source-topdeckgg-optional) |
+| `GET /api/event-tracker/registration-windows` | Every upcoming Regional Championship with venue, computed registration-open date, and a direct registration link - see [Registration windows](#registration-windows) |
 | `GET /api/event-tracker/debug/bandai-raw` | Raw plain text extracted from Bandai's regional-season pages, plus what got parsed out of it - the fastest way to fix the scraper if it stops matching |

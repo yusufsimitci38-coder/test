@@ -33,6 +33,15 @@ router.get('/debug/bandai-raw', async (req, res) => {
   }
 });
 
+router.get('/debug/topdeck-sample', async (req, res) => {
+  try {
+    res.json(await eventService.debugTopdeckRaw());
+  } catch (err) {
+    console.error('[event-tracker] debug topdeck-sample failed:', err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
 router.post('/refresh', async (req, res) => {
   try {
     const result = await eventService.refreshEvents();

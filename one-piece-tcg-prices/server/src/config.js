@@ -30,6 +30,11 @@ const config = {
   eventProvider: process.env.EVENT_PROVIDER || 'limitless',
   eventRefreshCron: process.env.EVENT_REFRESH_CRON || '30 13 * * *',
 
+  // Optional: merges TopDeck.gg tournaments into the calendar alongside the
+  // main event provider (see topdeckProvider.js). Skipped entirely, with no
+  // error, when unset - this is opt-in, not a required credential.
+  topdeckApiKey: process.env.TOPDECK_API_KEY || null,
+
   dataFile: require('path').join(__dirname, '..', 'data', 'db.json'),
 };
 
