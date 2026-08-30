@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 
-const EMPTY_STATE = { cards: {}, snapshots: {}, meta: {} };
+const EMPTY_STATE = { cards: {}, snapshots: {}, events: {}, meta: {} };
 
 let state = null;
 
@@ -23,6 +23,7 @@ function load() {
   }
   state.cards ||= {};
   state.snapshots ||= {};
+  state.events ||= {};
   state.meta ||= {};
   return state;
 }
@@ -123,6 +124,23 @@ function getSnapshotDaysAgo(productId, days) {
   return candidate;
 }
 
+function upsertEvent(event) {
+  const s = load();
+  const key = String(event.id);
+  s.events[key] = { ...s.events[key], ...event, updatedAt: new Date().toISOString() };
+  save();
+}
+
+function listEvents() {
+  const s = load();
+  return Object.values(s.events);
+}
+
+function getEvent(id) {
+  const s = load();
+  return s.events[String(id)] || null;
+}
+
 function setMeta(key, value) {
   const s = load();
   s.meta[key] = value;
@@ -144,6 +162,9 @@ module.exports = {
   getSnapshots,
   getLatestSnapshot,
   getSnapshotDaysAgo,
+  upsertEvent,
+  listEvents,
+  getEvent,
   setMeta,
   getMeta,
   flushSync,

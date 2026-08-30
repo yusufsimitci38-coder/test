@@ -10,48 +10,78 @@
   <header class="topbar">
     <h1>One Piece TCG Toolkit</h1>
     <nav class="tabs">
-      <button class="tab active" type="button">Price Tracker</button>
-      <button class="tab disabled" type="button" disabled title="Coming later">Event Tracker <span class="soon">soon</span></button>
+      <button class="tab active" type="button" id="tab-price-tracker">Price Tracker</button>
+      <button class="tab" type="button" id="tab-event-tracker">Event Tracker</button>
     </nav>
   </header>
 
   <main>
-    <section class="status-bar" id="status-bar">
-      <div id="status-text">Loading status…</div>
-      <button id="refresh-btn" type="button">Refresh now</button>
+    <section id="view-price-tracker" class="view">
+      <section class="status-bar" id="status-bar">
+        <div id="status-text">Loading status…</div>
+        <button id="refresh-btn" type="button">Refresh now</button>
+      </section>
+
+      <section class="controls">
+        <div class="filter-group">
+          <label><input type="checkbox" id="alerts-only" /> Alerts only</label>
+        </div>
+        <div class="filter-group">
+          <label for="color-select">Color</label>
+          <select id="color-select">
+            <option value="">All colors</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="set-select">Set</label>
+          <select id="set-select">
+            <option value="">All sets</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="sort-select">Sort by</label>
+          <select id="sort-select">
+            <option value="pctChange">Biggest % change</option>
+            <option value="price">Highest price</option>
+            <option value="name">Name</option>
+            <option value="color">Color</option>
+            <option value="set">Set</option>
+          </select>
+        </div>
+        <div class="threshold-note" id="threshold-note"></div>
+      </section>
+
+      <section id="cards-container" class="cards-grid" aria-live="polite">
+        <p class="empty-state">Loading cards…</p>
+      </section>
     </section>
 
-    <section class="controls">
-      <div class="filter-group">
-        <label><input type="checkbox" id="alerts-only" /> Alerts only</label>
-      </div>
-      <div class="filter-group">
-        <label for="color-select">Color</label>
-        <select id="color-select">
-          <option value="">All colors</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label for="set-select">Set</label>
-        <select id="set-select">
-          <option value="">All sets</option>
-        </select>
-      </div>
-      <div class="filter-group">
-        <label for="sort-select">Sort by</label>
-        <select id="sort-select">
-          <option value="pctChange">Biggest % change</option>
-          <option value="price">Highest price</option>
-          <option value="name">Name</option>
-          <option value="color">Color</option>
-          <option value="set">Set</option>
-        </select>
-      </div>
-      <div class="threshold-note" id="threshold-note"></div>
-    </section>
+    <section id="view-event-tracker" class="view" hidden>
+      <section class="status-bar" id="event-status-bar">
+        <div id="event-status-text">Loading status…</div>
+        <button id="event-refresh-btn" type="button">Refresh now</button>
+      </section>
 
-    <section id="cards-container" class="cards-grid" aria-live="polite">
-      <p class="empty-state">Loading cards…</p>
+      <p class="event-source-note">
+        Event dates come from <a href="https://onepiece.limitlesstcg.com" target="_blank" rel="noopener noreferrer">Limitless TCG</a>.
+        Registration/application windows aren't included here — click an event to open its page for that.
+      </p>
+
+      <section class="calendar-controls">
+        <button id="cal-prev" type="button" aria-label="Previous month">‹</button>
+        <h2 id="cal-month-label"></h2>
+        <button id="cal-next" type="button" aria-label="Next month">›</button>
+        <button id="cal-today" type="button">Today</button>
+      </section>
+
+      <section class="calendar-grid" id="calendar-grid" aria-live="polite">
+        <p class="empty-state">Loading events…</p>
+      </section>
+
+      <section class="day-detail" id="day-detail" hidden>
+        <h3 id="day-detail-title"></h3>
+        <ul id="day-detail-list"></ul>
+      </section>
     </section>
   </main>
 
@@ -84,5 +114,7 @@
   </template>
 
   <script src="app.js"></script>
+  <script src="events.js"></script>
+  <script src="nav.js"></script>
 </body>
 </html>

@@ -1,12 +1,13 @@
-# One Piece TCG Toolkit — Price Tracker
+# One Piece TCG Toolkit
 
-Tracks TCGPlayer market prices for One Piece Card Game singles and flags
-cards that have moved a lot recently: **price ≥ $4 and a ≥ 20% change over
-the trailing 30 days** (both thresholds are configurable).
+Two modules sharing one server and dashboard (see [Architecture](#architecture)):
 
-This is module 1 of a planned toolkit — an **event tracker** for One Piece
-TCG tournaments/locals is intended to follow as a second module, sharing
-this same server and UI shell (see [Architecture](#architecture)).
+- **Price Tracker** — tracks TCGPlayer market prices for One Piece Card
+  Game singles and flags cards that have moved a lot recently: **price ≥ $4
+  and a ≥ 20% change over the trailing 30 days** (both thresholds are
+  configurable).
+- **Event Tracker** — a calendar of One Piece TCG tournaments (Regionals,
+  Treasure Cups, online events) pulled from Limitless TCG's public data.
 
 ## Why this doesn't scrape tcgplayer.com directly
 
@@ -78,8 +79,10 @@ can see full functionality without waiting.
 | `WATCHLIST_MODE` | `all-sets` | `all-sets`, `recent-sets`, or `named-sets` |
 | `RECENT_SET_COUNT` | `8` | Sets tracked when mode is `recent-sets` |
 | `WATCHLIST_SET_NAMES` | *(empty)* | Comma-separated set names when mode is `named-sets` |
-| `REFRESH_CRON` | `0 13 * * *` | Daily refresh schedule (UTC, cron syntax) |
+| `REFRESH_CRON` | `0 13 * * *` | Daily price refresh schedule (UTC, cron syntax) |
 | `ONEPIECE_CATEGORY_ID` | *(empty)* | Optional: skip the category lookup by hardcoding tcgcsv's One Piece categoryId |
+| `EVENT_PROVIDER` | `limitless` | `limitless` (live data) or `mock` (offline demo data) |
+| `EVENT_REFRESH_CRON` | `30 13 * * *` | Daily event refresh schedule (UTC, cron syntax) |
 
 `all-sets` (the default) tracks every group tcgcsv.com has for the category
 — currently around 90, spanning mainline boosters (100-180+ cards each),
@@ -104,6 +107,29 @@ and set `PRICE_PROVIDER` to its key. The official endpoints
 `/catalog/products`, `/pricing/product/:ids`) return equivalent data —
 tcgcsv.com is literally a cache of those same responses.
 
+## Event Tracker
+
+Pulls tournament data from **[Limitless TCG](https://onepiece.limitlesstcg.com)**'s
+free, public, no-API-key tournament database (`play.limitlesstcg.com/api`,
+filtered to `game=OP`), and shows it as a month calendar in the dashboard's
+Event Tracker tab. Click a day with events to see the list; click an event
+to open its page on Limitless.
+
+**Registration/"application open" dates are deliberately not included.**
+There's no clean structured source for them: official Regional Championship
+registration windows are only published as human-readable text on Bandai's
+own site, and for smaller events it varies by organizer (RK9, email,
+Bandai's TCG+ app, ...) with no unified feed. Rather than scrape unstructured
+HTML and risk getting it wrong, each event links out to its own page, which
+is the place to check registration details for that specific event.
+
+Refreshes daily (`EVENT_REFRESH_CRON`, default offset 30 minutes after the
+price refresh) plus an initial fetch on first boot, same pattern as the
+price tracker. `EVENT_PROVIDER=mock` gives deterministic sample events
+(dates generated relative to today) for local dev without network access.
+`GET /api/event-tracker/debug/sample` returns a raw, untransformed sample
+straight from Limitless for checking its actual field shape.
+
 ## Architecture
 
 ```
@@ -111,33 +137,37 @@ tcgcsv.com is literally a cache of those same responses.
 ├─ server/
 │  └─ src/
 │     ├─ modules/
-│     │  └─ price-tracker/        ← this module
-│     │     ├─ providers/         ← pluggable price data sources
-│     │     ├─ priceService.js    ← fetch → snapshot → alert math
-│     │     ├─ alerts.js          ← threshold logic
-│     │     └─ routes.js          ← /api/price-tracker/*
+│     │  ├─ price-tracker/        ← price tracker module
+│     │  │  ├─ providers/         ← pluggable price data sources
+│     │  │  ├─ priceService.js    ← fetch → snapshot → alert math
+│     │  │  ├─ alerts.js          ← threshold logic
+│     │  │  └─ routes.js          ← /api/price-tracker/*
+│     │  └─ event-tracker/        ← event tracker module
+│     │     ├─ providers/         ← pluggable event data sources
+│     │     ├─ eventService.js    ← fetch → store → month filtering
+│     │     └─ routes.js          ← /api/event-tracker/*
 │     ├─ db.js                    ← JSON-file storage
-│     ├─ scheduler.js             ← daily cron refresh
+│     ├─ scheduler.js             ← daily cron refreshes
 │     └─ app.js / index.js
 └─ public/                        ← static dashboard (vanilla HTML/CSS/JS)
+   ├─ app.js                      ← price tracker view
+   ├─ events.js                   ← event tracker / calendar view
+   └─ nav.js                      ← tab switching between the two
 ```
 
 Each module owns its own `/api/<module-name>` route namespace and its own
-folder under `src/modules/`. When the event tracker is built, it should
-follow the same pattern (`src/modules/event-tracker/`, mounted at
-`/api/event-tracker`) and get its own tab in `public/index.html` next to
-the current disabled "Event Tracker — soon" placeholder — the nav and
-server are already structured for that.
+folder under `src/modules/`, mounted the same way in `app.js` - a further
+module would follow the same pattern.
 
 Storage is a flat JSON file (`server/data/db.json`), rewritten in full on
 every debounced save. That's fine at `recent-sets` scale (a few hundred
-cards), but with the `all-sets` default (several thousand cards, one
+cards) or for the event tracker's much smaller event list, but with the
+price tracker's `all-sets` default (several thousand cards, one
 snapshot/day each) the file will grow into the tens of MB over a year and
-every save gets a bit slower - acceptable for a hobby project, but if the
-event tracker needs relational data anyway (registrations, standings,
-etc.), that's a natural point to move both onto a real database. `db.js`
-is the only file that would need to change for the price tracker to move
-with it.
+every save gets a bit slower - acceptable for a hobby project, but if a
+future module needs relational data (e.g. structured registrations), that's
+a natural point to move everything onto a real database. `db.js` is the
+only file that would need to change for both modules to move with it.
 
 ## API
 
@@ -150,3 +180,8 @@ with it.
 | `POST /api/price-tracker/refresh` | Trigger an immediate price fetch |
 | `GET /api/price-tracker/debug/fetch-summary` | Per-set breakdown from the last refresh: products found vs. matched vs. skipped (tcgcsv provider only) |
 | `GET /api/price-tracker/debug/sample-product` | One raw, untransformed product+price record straight from tcgcsv.com, for inspecting its actual field shape (tcgcsv provider only) |
+| `GET /api/price-tracker/debug/card/:productId` | A tracked card's stored data next to a fresh raw fetch of that same card, for checking a reported data mismatch against the source (tcgcsv provider only) |
+| `GET /api/event-tracker/status` | Provider, event count, last refresh time |
+| `GET /api/event-tracker/events?month=YYYY-MM` | Events in a given month, sorted chronologically (omit `month` for the full list) |
+| `POST /api/event-tracker/refresh` | Trigger an immediate event fetch |
+| `GET /api/event-tracker/debug/sample` | Raw, untransformed sample response straight from Limitless, for inspecting its actual field shape (limitless provider only) |

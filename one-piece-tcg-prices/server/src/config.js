@@ -27,6 +27,9 @@ const config = {
     ? num(process.env.ONEPIECE_CATEGORY_ID, undefined)
     : undefined,
 
+  eventProvider: process.env.EVENT_PROVIDER || 'limitless',
+  eventRefreshCron: process.env.EVENT_REFRESH_CRON || '30 13 * * *',
+
   dataFile: require('path').join(__dirname, '..', 'data', 'db.json'),
 };
 
