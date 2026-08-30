@@ -162,6 +162,19 @@ Bandai's own regional-season pages
 (`server/src/modules/event-tracker/bandaiRegistration.js`) and shown as a
 table under the calendar, sorted chronologically by event date.
 
+Which season pages to scrape isn't hardcoded to today's seasons: every
+refresh, `discoverSeasonPages()` first fetches the site's own events index
+page (`en.onepiece-cardgame.com/events/`) and scrapes it for links matching
+the season-page URL pattern (`regional-season<N>-<YY>-<YY>.html`) - so when
+Bandai publishes 2027-28's season pages, they're picked up automatically the
+next time this refreshes, with no code change needed. `FALLBACK_SEASON_PAGES`
+(today's two known season URLs, hardcoded) is used only if that discovery
+fetch fails outright or the index page has no matching links - the same
+fail-safe pattern as everything else here, never a crash. The discovery
+result (what it found, or why it fell back) is included as the first entry
+in `GET /api/event-tracker/debug/bandai-raw`'s response, for checking it
+against the live site.
+
 Confirmed against the real page (via the debug endpoint below, checked
 against the live deployment): under "Event Schedule and Tournament
 Organizer", each region (North America / Europe / Oceania / Latin America)

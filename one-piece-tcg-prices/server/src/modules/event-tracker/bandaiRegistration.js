@@ -26,10 +26,53 @@ const { version } = require('../../../package.json');
 const { isEnglishSpeaking } = require('./regionClassifier');
 
 const USER_AGENT = `OnePieceTCGToolkit/${version || '0.0.0'}`;
-const SEASON_PAGES = [
+const EVENTS_INDEX_URL = 'https://en.onepiece-cardgame.com/events/';
+
+// Static fallback, used only if discovering season pages from the events
+// index (below) fails outright - e.g. the site is unreachable, or its
+// markup changes enough to break the discovery regex too. Left pointing at
+// the season(s) known at the time this was written; kept in sync manually
+// as a last resort, since discoverSeasonPages() is the primary path and
+// picks up new seasons (e.g. 27-28) automatically without a code change.
+const FALLBACK_SEASON_PAGES = [
   { label: 'Regional Season 1 (26-27)', url: 'https://en.onepiece-cardgame.com/events/regional-season1-26-27.html' },
   { label: 'Regional Season 2 (26-27)', url: 'https://en.onepiece-cardgame.com/events/regional-season2-26-27.html' },
 ];
+
+const SEASON_PAGE_HREF_RE = /href="([^"]*\/events\/(regional-season(\d+)-(\d{2})-(\d{2})\.html))"/gi;
+
+// Scrapes the site's own events index page for links matching the Regional
+// season-page URL pattern (e.g. "regional-season1-26-27.html"), so a new
+// season (27-28, 28-29, ...) is picked up automatically the next time it's
+// linked from that page, instead of needing this file edited every year.
+async function discoverSeasonPages() {
+  const html = await fetchHtml(EVENTS_INDEX_URL);
+  const found = new Map();
+
+  SEASON_PAGE_HREF_RE.lastIndex = 0;
+  let m = SEASON_PAGE_HREF_RE.exec(html);
+  while (m) {
+    const [, href, slug, seasonNum, startYr, endYr] = m;
+    const url = new URL(href, EVENTS_INDEX_URL).toString();
+    if (!found.has(url)) {
+      found.set(url, { label: `Regional Season ${seasonNum} (${startYr}-${endYr})`, url });
+    }
+    m = SEASON_PAGE_HREF_RE.exec(html);
+  }
+
+  return [...found.values()];
+}
+
+async function getSeasonPages() {
+  try {
+    const discovered = await discoverSeasonPages();
+    if (discovered.length) return discovered;
+    console.warn('[bandai] events index page had no regional-season links, falling back to hardcoded list');
+  } catch (err) {
+    console.warn(`[bandai] couldn't discover season pages from events index (${err.message}), falling back to hardcoded list`);
+  }
+  return FALLBACK_SEASON_PAGES;
+}
 
 async function fetchHtml(url) {
   const controller = new AbortController();
@@ -201,7 +244,8 @@ function extractApplicationPeriodInfo(applicationText) {
 
 async function fetchRegistrationWindows() {
   const events = [];
-  for (const page of SEASON_PAGES) {
+  const pages = await getSeasonPages();
+  for (const page of pages) {
     try {
       const text = htmlToStructuredText(await fetchHtml(page.url));
       const scheduleText = sliceSection(text, 'Event Schedule and Tournament Organizer', 'Advanced Application Method');
@@ -222,7 +266,23 @@ async function fetchRegistrationWindows() {
 // (@@ROW@@/@@CELL@@) for a human to eyeball the real structure.
 async function fetchRawText() {
   const results = [];
-  for (const page of SEASON_PAGES) {
+  let discoveryError = null;
+  let discoveredPages = [];
+  try {
+    discoveredPages = await discoverSeasonPages();
+  } catch (err) {
+    discoveryError = err.message;
+  }
+  results.push({
+    label: '(season page discovery)',
+    discoveredPages,
+    discoveryError,
+    usingFallback: discoveredPages.length === 0,
+    fallbackPages: discoveredPages.length === 0 ? FALLBACK_SEASON_PAGES : undefined,
+  });
+
+  const pages = discoveredPages.length ? discoveredPages : FALLBACK_SEASON_PAGES;
+  for (const page of pages) {
     try {
       const html = await fetchHtml(page.url);
       const text = htmlToStructuredText(html);
@@ -257,4 +317,5 @@ module.exports = {
   sliceSection,
   extractRegionalEvents,
   extractApplicationPeriodInfo,
+  discoverSeasonPages,
 };
