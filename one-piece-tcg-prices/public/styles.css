@@ -344,3 +344,49 @@ main {
   color: var(--muted);
   margin-top: 0.2rem;
 }
+
+.reg-windows {
+  margin-top: 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+}
+
+.reg-windows h3 { margin: 0 0 0.4rem; font-size: 1rem; }
+
+.reg-windows-note {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin: 0 0 0.85rem;
+  line-height: 1.4;
+}
+
+.reg-windows-note a { color: var(--accent); }
+
+.reg-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.reg-table th {
+  text-align: left;
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  padding: 0.4rem 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.reg-table td {
+  padding: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.reg-table tr:last-child td { border-bottom: none; }
+
+.reg-table a { color: var(--accent); text-decoration: none; }
+
+.reg-table a:hover { text-decoration: underline; }

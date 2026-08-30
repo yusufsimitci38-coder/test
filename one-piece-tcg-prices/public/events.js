@@ -11,6 +11,7 @@ const evEl = {
   dayDetail: document.getElementById('day-detail'),
   dayDetailTitle: document.getElementById('day-detail-title'),
   dayDetailList: document.getElementById('day-detail-list'),
+  regWindowsList: document.getElementById('reg-windows-list'),
 };
 
 let currentMonth = new Date(); // day-of-month is irrelevant, only year/month used
@@ -149,12 +150,45 @@ function showDayDetail(dayStr, events) {
     .join('');
 }
 
+async function loadRegistrationWindows() {
+  try {
+    const data = await fetchJsonEv(`${EVENT_API}/registration-windows`);
+    const windows = data.windows || [];
+    if (!windows.length) {
+      evEl.regWindowsList.innerHTML =
+        '<p class="empty-state">None found yet — check back after the next refresh, or verify directly on the official page above.</p>';
+      return;
+    }
+    evEl.regWindowsList.innerHTML = `
+      <table class="reg-table">
+        <thead><tr><th>Event month</th><th>Applications open</th><th>Season</th></tr></thead>
+        <tbody>
+          ${windows
+            .map(
+              (w) => `
+            <tr>
+              <td>${escapeHtml(w.eventMonth)}</td>
+              <td>${escapeHtml(w.applicationOpensOn)}</td>
+              <td><a href="${w.sourceUrl}" target="_blank" rel="noopener noreferrer">${escapeHtml(w.season)}</a></td>
+            </tr>
+          `
+            )
+            .join('')}
+        </tbody>
+      </table>
+    `;
+  } catch (err) {
+    console.error('Failed to load registration windows:', err);
+    evEl.regWindowsList.innerHTML = `<p class="empty-state">Couldn't load registration windows: ${err.message}</p>`;
+  }
+}
+
 async function refreshEvents() {
   evEl.refreshBtn.disabled = true;
   evEl.refreshBtn.textContent = 'Refreshing…';
   try {
     await fetch(`${EVENT_API}/refresh`, { method: 'POST' });
-    await Promise.all([loadEventStatus(), loadCalendar()]);
+    await Promise.all([loadEventStatus(), loadCalendar(), loadRegistrationWindows()]);
   } catch (err) {
     console.error(err);
     alert('Refresh failed. Check the server logs.');
@@ -184,4 +218,5 @@ window.ensureEventsLoaded = function ensureEventsLoaded() {
   eventsLoadedOnce = true;
   loadEventStatus();
   loadCalendar();
+  loadRegistrationWindows();
 };

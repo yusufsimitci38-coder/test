@@ -64,7 +64,7 @@
 
       <p class="event-source-note">
         Event dates come from <a href="https://onepiece.limitlesstcg.com" target="_blank" rel="noopener noreferrer">Limitless TCG</a>.
-        Registration/application windows aren't included here — click an event to open its page for that.
+        Click an event to open its own page for registration details.
       </p>
 
       <section class="calendar-controls">
@@ -81,6 +81,16 @@
       <section class="day-detail" id="day-detail" hidden>
         <h3 id="day-detail-title"></h3>
         <ul id="day-detail-list"></ul>
+      </section>
+
+      <section class="reg-windows">
+        <h3>Regional Registration Windows</h3>
+        <p class="reg-windows-note">
+          When applications open for Regional Championships, by event month — scraped best-effort from the
+          <a href="https://en.onepiece-cardgame.com/events/" target="_blank" rel="noopener noreferrer">official Bandai events page</a>
+          (no public API exists for this). Always double-check the exact date/time on that page before relying on it.
+        </p>
+        <div id="reg-windows-list"><p class="empty-state">Loading…</p></div>
       </section>
     </section>
   </main>

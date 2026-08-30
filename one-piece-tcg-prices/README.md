@@ -113,15 +113,10 @@ Pulls tournament data from **[Limitless TCG](https://onepiece.limitlesstcg.com)*
 free, public, no-API-key tournament database (`play.limitlesstcg.com/api`,
 filtered to `game=OP`), and shows it as a month calendar in the dashboard's
 Event Tracker tab. Click a day with events to see the list; click an event
-to open its page on Limitless.
-
-**Registration/"application open" dates are deliberately not included.**
-There's no clean structured source for them: official Regional Championship
-registration windows are only published as human-readable text on Bandai's
-own site, and for smaller events it varies by organizer (RK9, email,
-Bandai's TCG+ app, ...) with no unified feed. Rather than scrape unstructured
-HTML and risk getting it wrong, each event links out to its own page, which
-is the place to check registration details for that specific event.
+to open its page on Limitless. Both the plain listing and the site's
+separate `/tournaments/upcoming` listing are fetched and merged, since the
+plain one is biased toward already-*held* events (Limitless is fundamentally
+a results database).
 
 Refreshes daily (`EVENT_REFRESH_CRON`, default offset 30 minutes after the
 price refresh) plus an initial fetch on first boot, same pattern as the
@@ -129,6 +124,27 @@ price tracker. `EVENT_PROVIDER=mock` gives deterministic sample events
 (dates generated relative to today) for local dev without network access.
 `GET /api/event-tracker/debug/sample` returns a raw, untransformed sample
 straight from Limitless for checking its actual field shape.
+
+### Registration/"application open" windows
+
+No third-party source publishes these at all - checked RK9, TopDeck.gg,
+gumgum.gg, and OPlayTCG; a paid wrapper called Parse.bot exists specifically
+*because* `en.onepiece-cardgame.com` "does not publish a public developer
+API or documented data feed." So this is scraped, best-effort, straight from
+Bandai's own regional-season pages
+(`server/src/modules/event-tracker/bandaiRegistration.js`) and shown as a
+small table under the calendar - by event month, not per specific event,
+since that's the granularity Bandai itself publishes this at.
+
+This is meaningfully more fragile than the JSON-based providers: it depends
+on regexing plain text extracted from the page rather than a stable API
+contract, so a Bandai site redesign or wording change can silently break
+extraction (it fails safe - an empty table, not a crash; a failure here
+never blocks the regular event refresh). `GET /api/event-tracker/debug/bandai-raw`
+returns the actual extracted plain text from each season page (plus what
+got parsed out of it), which is the fastest way to fix the regex in
+`bandaiRegistration.js` if Bandai's actual wording turns out to differ
+from what it currently expects.
 
 ## Architecture
 
@@ -185,3 +201,5 @@ only file that would need to change for both modules to move with it.
 | `GET /api/event-tracker/events?month=YYYY-MM` | Events in a given month, sorted chronologically (omit `month` for the full list) |
 | `POST /api/event-tracker/refresh` | Trigger an immediate event fetch |
 | `GET /api/event-tracker/debug/sample` | Raw, untransformed sample response straight from Limitless, for inspecting its actual field shape (limitless provider only) |
+| `GET /api/event-tracker/registration-windows` | Scraped Regional Championship registration-open dates, by event month (best-effort - see [Registration/"application open" windows](#registrationapplication-open-windows)) |
+| `GET /api/event-tracker/debug/bandai-raw` | Raw plain text extracted from Bandai's regional-season pages, plus what got parsed out of it - the fastest way to fix the scraper if it stops matching |
