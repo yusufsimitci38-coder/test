@@ -116,7 +116,16 @@ Event Tracker tab. Click a day with events to see the list; click an event
 to open its page on Limitless. Both the plain listing and the site's
 separate `/tournaments/upcoming` listing are fetched and merged, since the
 plain one is biased toward already-*held* events (Limitless is fundamentally
-a results database).
+a results database) - and fetched in that order (`upcoming` first): the
+plain listing is a full historical archive with far more pages than we pull
+(`PAST_MAX_PAGES` in `limitlessProvider.js` deliberately caps it small), and
+paging through it can burn Limitless's rate limit on its own - confirmed
+live, where a refresh capped out exactly at that page limit and the very
+next request came back HTTP 429. Fetching `upcoming` first means a rate
+limit hit later, while paging through history, no longer costs the one part
+of this that can't be found anywhere else. `fetchJson()` also retries once
+or twice on a 429 (honoring `Retry-After` if the response includes one,
+otherwise a short exponential backoff) before giving up on that request.
 
 Each event also gets a best-effort `location` (venue/city), fetched from a
 separate per-tournament details lookup that the basic list doesn't include -

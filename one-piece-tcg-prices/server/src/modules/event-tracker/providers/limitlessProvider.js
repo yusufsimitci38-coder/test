@@ -16,15 +16,27 @@ const BASE = 'https://play.limitlesstcg.com/api';
 const USER_AGENT = `OnePieceTCGToolkit/${version || '0.0.0'}`;
 const GAME = 'OP';
 const PAGE_SIZE = 100;
-const MAX_PAGES = 6; // generous cap (up to 600 tournaments) against runaway pagination
+// The plain listing is Limitless's full historical archive - it has far
+// more than a handful of pages' worth of *already-held* tournaments (a real
+// refresh hit this cap exactly, at 600, meaning there's plenty more history
+// beyond it). Past events don't need exhaustive coverage the way future
+// ones do, so this stays deliberately small to leave rate-limit budget for
+// the upcoming listing and detail enrichment below.
+const PAST_MAX_PAGES = 2;
+// The upcoming listing is realistically much smaller (near-term scheduled
+// events, not a full archive), so this stays generous.
+const UPCOMING_MAX_PAGES = 6;
 const MAX_DETAIL_FETCHES = 200; // bound how long a refresh can take enriching venues
 const DETAIL_PACING_MS = 150;
+const PAGE_PACING_MS = 400; // between paginated requests, to avoid bursting past Limitless's rate limit
+const MAX_429_RETRIES = 2;
+const RETRY_BASE_DELAY_MS = 2000;
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-async function fetchJson(path) {
+async function fetchJson(path, attempt = 0) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
   try {
@@ -32,6 +44,16 @@ async function fetchJson(path) {
       signal: controller.signal,
       headers: { 'User-Agent': USER_AGENT, Accept: 'application/json' },
     });
+    if (res.status === 429 && attempt < MAX_429_RETRIES) {
+      clearTimeout(timeout);
+      const retryAfterHeader = Number(res.headers.get('retry-after'));
+      const delay = Number.isFinite(retryAfterHeader) && retryAfterHeader > 0
+        ? retryAfterHeader * 1000
+        : RETRY_BASE_DELAY_MS * 2 ** attempt;
+      console.warn(`[limitless] rate limited on ${path}, retrying in ${delay}ms (attempt ${attempt + 1}/${MAX_429_RETRIES})`);
+      await sleep(delay);
+      return fetchJson(path, attempt + 1);
+    }
     if (!res.ok) {
       throw new Error(`${BASE}${path} -> HTTP ${res.status}`);
     }
@@ -58,9 +80,10 @@ function normalizeEvent(raw) {
 
 // Paginates through one listing path (e.g. "/tournaments" or
 // "/tournaments/upcoming") until a short page signals the end.
-async function fetchAllPages(basePath) {
+async function fetchAllPages(basePath, maxPages) {
   const events = [];
-  for (let page = 1; page <= MAX_PAGES; page += 1) {
+  for (let page = 1; page <= maxPages; page += 1) {
+    if (page > 1) await sleep(PAGE_PACING_MS);
     const batch = await fetchJson(`${basePath}?game=${GAME}&limit=${PAGE_SIZE}&page=${page}`);
     const list = Array.isArray(batch) ? batch : Array.isArray(batch?.tournaments) ? batch.tournaments : [];
     if (!list.length) break;
@@ -143,15 +166,34 @@ async function fetchEvents() {
   // listing, mirroring the distinct /tournaments/upcoming page on the
   // website itself. Merged by id so a calendar month works whether you're
   // looking at the past or the future.
+  //
+  // Fetched in this order deliberately: upcoming events are what the
+  // calendar most needs and are a much smaller listing, while the plain
+  // listing is a full historical archive that alone can burn through
+  // Limitless's rate limit (confirmed live - a refresh capped out at exactly
+  // PAST_MAX_PAGES worth of results, and the very next request came back
+  // HTTP 429). Fetching upcoming first means a rate limit hit later, while
+  // paging through history, no longer costs the one part of this that
+  // can't be found anywhere else on the calendar.
   const merged = new Map();
-  for (const e of await fetchAllPages('/tournaments')) merged.set(e.id, e);
 
   try {
-    for (const e of await fetchAllPages('/tournaments/upcoming')) merged.set(e.id, e);
+    for (const e of await fetchAllPages('/tournaments/upcoming', UPCOMING_MAX_PAGES)) merged.set(e.id, e);
   } catch (err) {
     // Best-effort: if this path guess turns out wrong, don't take down the
-    // whole refresh over it - past events from the call above still work.
+    // whole refresh over it - the plain listing below still works.
     console.warn(`[limitless] couldn't fetch upcoming tournaments (${err.message}); showing past events only`);
+  }
+
+  try {
+    for (const e of await fetchAllPages('/tournaments', PAST_MAX_PAGES)) {
+      if (!merged.has(e.id)) merged.set(e.id, e);
+    }
+  } catch (err) {
+    // Best-effort: if the plain listing fails (e.g. rate limited after the
+    // upcoming fetch above), whatever upcoming events were already found
+    // still work - don't lose those over a failure fetching history.
+    console.warn(`[limitless] couldn't fetch past tournaments (${err.message}); showing upcoming events only`);
   }
 
   const events = [...merged.values()];
