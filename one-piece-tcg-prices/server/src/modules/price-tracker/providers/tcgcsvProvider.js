@@ -182,4 +182,32 @@ function numOrNull(v) {
   return Number.isFinite(n) ? n : null;
 }
 
-module.exports = { fetchWatchlistPrices };
+// Diagnostic only (not part of the shared provider contract): returns one
+// raw, untransformed product + price record straight from tcgcsv.com so we
+// can see its actual field names/shapes instead of guessing at them - used
+// by GET /api/price-tracker/debug/sample-product.
+async function fetchSampleRawProduct() {
+  const categoryId = await findOnePieceCategoryId();
+  const allGroups = await listGroups(categoryId);
+  const [group] = pickGroups(allGroups, { mode: 'recent-sets', recentSetCount: 1, setNames: [] });
+  if (!group) return { error: 'No groups found for the One Piece category.' };
+
+  const [products, prices] = await Promise.all([
+    listProducts(categoryId, group.groupId),
+    listPrices(categoryId, group.groupId),
+  ]);
+  const product = products[0] || null;
+  const price = product ? prices.find((p) => p.productId === product.productId) || null : null;
+
+  return {
+    categoryId,
+    group,
+    product,
+    price,
+    extendedDataFieldNames: Array.isArray(product?.extendedData)
+      ? product.extendedData.map((f) => f.name || f.displayName)
+      : null,
+  };
+}
+
+module.exports = { fetchWatchlistPrices, fetchSampleRawProduct };

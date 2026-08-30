@@ -129,4 +129,12 @@ function getStatus() {
   };
 }
 
-module.exports = { refreshPrices, getCards, getCardHistory, getStatus, getFacets };
+async function debugSampleProduct() {
+  const provider = getProvider();
+  if (typeof provider.fetchSampleRawProduct !== 'function') {
+    return { error: `The "${config.priceProvider}" provider doesn't support this diagnostic.` };
+  }
+  return provider.fetchSampleRawProduct();
+}
+
+module.exports = { refreshPrices, getCards, getCardHistory, getStatus, getFacets, debugSampleProduct };
