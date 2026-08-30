@@ -133,12 +133,25 @@ function pickGroups(groups, watchlistConfig) {
   }
 }
 
+let lastSummary = null;
+
+// Per-group breakdown of the last fetch: how many products tcgcsv listed
+// for each set vs. how many actually had a matching price row and made it
+// into the tracked cards. Lets us answer "why does the count look low" with
+// real numbers instead of guessing. Not part of the shared provider
+// contract - read via getLastFetchSummary().
+function getLastFetchSummary() {
+  return lastSummary;
+}
+
 async function fetchWatchlistPrices(watchlistConfig) {
   const categoryId = await findOnePieceCategoryId();
   const allGroups = await listGroups(categoryId);
   const groups = pickGroups(allGroups, watchlistConfig);
 
   const cards = [];
+  const perGroup = [];
+
   for (const [index, group] of groups.entries()) {
     if (index > 0) await sleep(BETWEEN_REQUESTS_MS);
 
@@ -150,6 +163,7 @@ async function fetchWatchlistPrices(watchlistConfig) {
       ]);
     } catch (err) {
       console.warn(`[tcgcsv] skipping set "${group.name}" (${group.groupId}): ${err.message}`);
+      perGroup.push({ setId: group.groupId, setName: group.name, error: err.message });
       continue;
     }
 
@@ -163,9 +177,11 @@ async function fetchWatchlistPrices(watchlistConfig) {
       }
     }
 
+    let matched = 0;
     for (const product of products) {
       const price = priceByProduct.get(product.productId);
       if (!price) continue; // no listing/price data for this product right now
+      matched += 1;
 
       const number = extendedField(product, [/number/i]);
 
@@ -191,7 +207,26 @@ async function fetchWatchlistPrices(watchlistConfig) {
         highPrice: numOrNull(price.highPrice),
       });
     }
+
+    perGroup.push({
+      setId: group.groupId,
+      setName: group.name,
+      publishedOn: group.publishedOn || null,
+      productCount: products.length,
+      priceRowCount: prices.length,
+      matchedCount: matched,
+      skippedCount: products.length - matched,
+    });
   }
+
+  lastSummary = {
+    at: new Date().toISOString(),
+    watchlistMode: watchlistConfig.mode,
+    groupsConsidered: allGroups.length,
+    groupsFetched: groups.length,
+    totalCards: cards.length,
+    perGroup,
+  };
 
   return cards;
 }
@@ -229,4 +264,4 @@ async function fetchSampleRawProduct() {
   };
 }
 
-module.exports = { fetchWatchlistPrices, fetchSampleRawProduct };
+module.exports = { fetchWatchlistPrices, fetchSampleRawProduct, getLastFetchSummary };

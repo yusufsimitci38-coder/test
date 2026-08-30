@@ -32,6 +32,10 @@ async function refreshPrices() {
     db.setMeta('seeded', true);
   }
 
+  if (typeof provider.getLastFetchSummary === 'function') {
+    db.setMeta('lastFetchSummary', provider.getLastFetchSummary());
+  }
+
   db.setMeta('lastRefreshAt', new Date().toISOString());
   db.setMeta('provider', config.priceProvider);
   db.flushSync();
@@ -137,4 +141,16 @@ async function debugSampleProduct() {
   return provider.fetchSampleRawProduct();
 }
 
-module.exports = { refreshPrices, getCards, getCardHistory, getStatus, getFacets, debugSampleProduct };
+function getLastFetchSummary() {
+  return db.getMeta('lastFetchSummary') || null;
+}
+
+module.exports = {
+  refreshPrices,
+  getCards,
+  getCardHistory,
+  getStatus,
+  getFacets,
+  debugSampleProduct,
+  getLastFetchSummary,
+};

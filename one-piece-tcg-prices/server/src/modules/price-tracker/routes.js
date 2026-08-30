@@ -34,6 +34,12 @@ router.get('/debug/sample-product', async (req, res) => {
   }
 });
 
+router.get('/debug/fetch-summary', (req, res) => {
+  const summary = priceService.getLastFetchSummary();
+  if (!summary) return res.status(404).json({ error: 'No refresh has completed yet - try "Refresh now" first.' });
+  res.json(summary);
+});
+
 router.post('/refresh', async (req, res) => {
   try {
     const result = await priceService.refreshPrices();
