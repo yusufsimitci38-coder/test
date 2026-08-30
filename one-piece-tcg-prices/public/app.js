@@ -20,6 +20,12 @@ function fmtPct(v) {
   return `${sign}${v.toFixed(1)}%`;
 }
 
+function fmtPctShort(v) {
+  if (v == null) return '—';
+  const sign = v > 0 ? '+' : '';
+  return `${sign}${v.toFixed(1)}%`;
+}
+
 function fmtDate(v) {
   return v ? new Date(v).toLocaleString() : 'never';
 }
@@ -109,9 +115,19 @@ function renderCard(card) {
   pctEl.textContent = fmtPct(card.pctChange);
   pctEl.classList.add(card.pctChange == null ? 'na' : card.direction);
 
+  node.querySelector('.provisional-badge').hidden = card.hasEnoughHistory;
+
+  const dailyEl = node.querySelector('.mini-change.daily');
+  dailyEl.textContent = `1d ${fmtPctShort(card.dailyChangePct)}`;
+  dailyEl.classList.add(card.dailyChangePct == null ? 'na' : card.dailyDirection);
+
+  const weeklyEl = node.querySelector('.mini-change.weekly');
+  weeklyEl.textContent = `7d ${fmtPctShort(card.weeklyChangePct)}`;
+  weeklyEl.classList.add(card.weeklyChangePct == null ? 'na' : card.weeklyDirection);
+
   node.querySelector('.price-past').textContent = card.hasEnoughHistory
     ? `${fmtMoney(card.priceLookbackDaysAgo)} ~30 days ago`
-    : 'Collecting history — check back in a few weeks';
+    : `Collecting history — ${card.historyDaysCollected}/${card.historyDaysNeeded} days so far`;
 
   const link = node.querySelector('.tcg-link');
   link.href = card.url;
