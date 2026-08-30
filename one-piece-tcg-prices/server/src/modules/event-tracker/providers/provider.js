@@ -8,6 +8,7 @@
 //     format: string | null,  // e.g. "Standard"
 //     organizer: string | null,
 //     players: number | null, // registered/participating player count, if known
+//     location: string | null, // venue/city/etc, best-effort - may be null
 //     url: string | null,     // link back to the event's page on the source site
 //   }
 //

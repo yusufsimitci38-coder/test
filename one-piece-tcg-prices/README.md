@@ -118,12 +118,25 @@ separate `/tournaments/upcoming` listing are fetched and merged, since the
 plain one is biased toward already-*held* events (Limitless is fundamentally
 a results database).
 
+Each event also gets a best-effort `location` (venue/city), fetched from a
+separate per-tournament details lookup that the basic list doesn't include -
+the exact endpoint path and field name aren't confirmed from this dev
+environment (network-blocked from it too), so two plausible paths are tried
+and whichever responds is reused for the rest of the refresh. Capped and
+paced (`MAX_DETAIL_FETCHES`/`DETAIL_PACING_MS` in `limitlessProvider.js`) so
+it can't make a refresh unboundedly slow; a failure here just leaves
+`location` null for that event rather than breaking anything. Shown under
+the event name in the day-detail panel and as a hover tooltip on its
+calendar pill - the fastest way to tell apart same-day events that share a
+generic name (e.g. two different cities' Regionals) at a glance.
+
 Refreshes daily (`EVENT_REFRESH_CRON`, default offset 30 minutes after the
 price refresh) plus an initial fetch on first boot, same pattern as the
 price tracker. `EVENT_PROVIDER=mock` gives deterministic sample events
 (dates generated relative to today) for local dev without network access.
 `GET /api/event-tracker/debug/sample` returns a raw, untransformed sample
-straight from Limitless for checking its actual field shape.
+straight from Limitless - including a details-endpoint lookup on a real
+tournament id - for checking its actual field shape.
 
 ### Registration/"application open" windows
 

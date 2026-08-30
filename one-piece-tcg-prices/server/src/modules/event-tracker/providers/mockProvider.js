@@ -13,15 +13,15 @@ function daysFromNow(offset, hour = 18, minute = 0) {
 // Offsets are in days relative to today; a mix of past, present, and future
 // so navigating the calendar back/forward shows something in each month.
 const SAMPLE_EVENTS = [
-  { id: 'mock-1', offset: -35, name: 'Treasure Cup - Mock Games (Weekly)', format: 'Standard', organizer: 'Mock Games', players: 18 },
-  { id: 'mock-2', offset: -14, name: 'Online Regional Qualifier', format: 'Standard', organizer: 'RK9', players: 96 },
-  { id: 'mock-3', offset: -2, name: 'Treasure Cup - Mock Games (Weekly)', format: 'Standard', organizer: 'Mock Games', players: 22 },
-  { id: 'mock-4', offset: 5, name: 'Treasure Cup - Card Kingdom Mock', format: 'Standard', organizer: 'Card Kingdom Mock', players: 14 },
-  { id: 'mock-5', offset: 12, name: 'Regional Championship - Mock City', format: 'Standard', organizer: 'Bandai', players: 256 },
-  { id: 'mock-6', offset: 12, name: 'Regional Championship Side Event - Mock City', format: 'Standard', organizer: 'Bandai', players: 32 },
-  { id: 'mock-7', offset: 26, name: 'Treasure Cup - Mock Games (Weekly)', format: 'Standard', organizer: 'Mock Games', players: 20 },
-  { id: 'mock-8', offset: 48, name: 'Online Regional', format: 'Standard', organizer: 'RK9', players: 120 },
-  { id: 'mock-9', offset: 70, name: 'World Championship Qualifier', format: 'Standard', organizer: 'Bandai', players: 400 },
+  { id: 'mock-1', offset: -35, name: 'Treasure Cup - Mock Games (Weekly)', format: 'Standard', organizer: 'Mock Games', players: 18, location: 'Mock Games, Springfield, IL, USA' },
+  { id: 'mock-2', offset: -14, name: 'Online Regional Qualifier', format: 'Standard', organizer: 'RK9', players: 96, location: 'Online' },
+  { id: 'mock-3', offset: -2, name: 'Treasure Cup - Mock Games (Weekly)', format: 'Standard', organizer: 'Mock Games', players: 22, location: 'Mock Games, Springfield, IL, USA' },
+  { id: 'mock-4', offset: 5, name: 'Treasure Cup - Card Kingdom Mock', format: 'Standard', organizer: 'Card Kingdom Mock', players: 14, location: 'Card Kingdom Mock, Seattle, WA, USA' },
+  { id: 'mock-5', offset: 12, name: 'Regional Championship - Mock City', format: 'Standard', organizer: 'Bandai', players: 256, location: 'Mock Convention Center, Mock City, CA, USA' },
+  { id: 'mock-6', offset: 12, name: 'Regional Championship Side Event - Mock City', format: 'Standard', organizer: 'Bandai', players: 32, location: 'Mock Convention Center, Mock City, CA, USA' },
+  { id: 'mock-7', offset: 26, name: 'Treasure Cup - Mock Games (Weekly)', format: 'Standard', organizer: 'Mock Games', players: 20, location: 'Mock Games, Springfield, IL, USA' },
+  { id: 'mock-8', offset: 48, name: 'Online Regional', format: 'Standard', organizer: 'RK9', players: 120, location: 'Online' },
+  { id: 'mock-9', offset: 70, name: 'World Championship Qualifier', format: 'Standard', organizer: 'Bandai', players: 400, location: 'Mock Expo Hall, Tokyo, Japan' },
 ];
 
 async function fetchEvents() {
@@ -32,6 +32,7 @@ async function fetchEvents() {
     format: e.format,
     organizer: e.organizer,
     players: e.players,
+    location: e.location,
     url: `https://play.limitlesstcg.com/tournament/${e.id}/details`,
   }));
 }

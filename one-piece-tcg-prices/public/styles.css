@@ -336,6 +336,12 @@ main {
 
 .day-detail a:hover { color: var(--accent); text-decoration: underline; }
 
+.day-detail-location {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin: 0.15rem 0 0;
+}
+
 .day-detail-meta {
   display: flex;
   gap: 0.75rem;

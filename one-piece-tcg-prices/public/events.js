@@ -94,7 +94,10 @@ function renderGrid(events) {
     const dayEvents = byDay.get(dayStr) || [];
     const pills = dayEvents
       .slice(0, MAX_VISIBLE)
-      .map((e) => `<div class="cal-event">${escapeHtml(e.name)}</div>`)
+      .map(
+        (e) =>
+          `<div class="cal-event" title="${escapeHtml(e.location || '')}">${escapeHtml(e.name)}</div>`
+      )
       .join('');
     const more = dayEvents.length > MAX_VISIBLE ? `<div class="cal-more">+${dayEvents.length - MAX_VISIBLE} more</div>` : '';
     const classes = ['cal-cell'];
@@ -138,6 +141,7 @@ function showDayDetail(dayStr, events) {
       return `
         <li>
           <a href="${e.url || '#'}" target="_blank" rel="noopener noreferrer">${escapeHtml(e.name)}</a>
+          ${e.location ? `<p class="day-detail-location">📍 ${escapeHtml(e.location)}</p>` : ''}
           <div class="day-detail-meta">
             ${time ? `<span>${time}</span>` : ''}
             ${e.format ? `<span>${escapeHtml(e.format)}</span>` : ''}
