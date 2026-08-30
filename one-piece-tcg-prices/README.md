@@ -129,17 +129,24 @@ follow the same pattern (`src/modules/event-tracker/`, mounted at
 the current disabled "Event Tracker — soon" placeholder — the nav and
 server are already structured for that.
 
-Storage is a flat JSON file (`server/data/db.json`), which is plenty for a
-few hundred cards with one snapshot/day. If the event tracker needs
-relational data (registrations, standings, etc.) it's reasonable to bring
-in a real database at that point — `db.js` is the only file that would
-need to change for the price tracker to move with it.
+Storage is a flat JSON file (`server/data/db.json`), rewritten in full on
+every debounced save. That's fine at `recent-sets` scale (a few hundred
+cards), but with the `all-sets` default (several thousand cards, one
+snapshot/day each) the file will grow into the tens of MB over a year and
+every save gets a bit slower - acceptable for a hobby project, but if the
+event tracker needs relational data anyway (registrations, standings,
+etc.), that's a natural point to move both onto a real database. `db.js`
+is the only file that would need to change for the price tracker to move
+with it.
 
 ## API
 
 | Endpoint | Description |
 |---|---|
 | `GET /api/price-tracker/status` | Provider, thresholds, counts, last refresh time |
-| `GET /api/price-tracker/cards?alertsOnly=true&sort=pctChange\|price\|name` | Card list with computed price-change/alert fields |
+| `GET /api/price-tracker/cards?alertsOnly=true&sort=pctChange\|price\|name\|color\|set&color=&setCode=` | Card list with computed price-change/alert fields, filterable by color/setCode |
+| `GET /api/price-tracker/facets` | Distinct colors and sets actually present in the tracked cards (for populating filter dropdowns) |
 | `GET /api/price-tracker/cards/:productId/history` | Full daily price history for one card |
 | `POST /api/price-tracker/refresh` | Trigger an immediate price fetch |
+| `GET /api/price-tracker/debug/fetch-summary` | Per-set breakdown from the last refresh: products found vs. matched vs. skipped (tcgcsv provider only) |
+| `GET /api/price-tracker/debug/sample-product` | One raw, untransformed product+price record straight from tcgcsv.com, for inspecting its actual field shape (tcgcsv provider only) |
