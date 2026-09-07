@@ -108,6 +108,26 @@ and set `PRICE_PROVIDER` to its key. The official endpoints
 `/catalog/products`, `/pricing/product/:ids`) return equivalent data —
 tcgcsv.com is literally a cache of those same responses.
 
+## Favorites
+
+Click the ☆ on any card (Price Tracker or Favorites itself) to star it; a
+separate **Favorites** tab shows only starred cards, with the same sort
+options as the main grid. Stored server-side (`favorites` in the data
+file, keyed by productId) rather than in the browser, so it shows up the
+same way from any device hitting this deployment - see
+[Persistence across redeploys](#persistence-across-redeploys) above for why
+that means setting `DATA_DIR` to a mounted volume matters more here than
+for prices/events: a lost favorite can't be re-fetched from a source the
+way cached price/event data can, it just has to be re-starred by hand.
+
+Favoriting bypasses `MIN_DISPLAY_PRICE` - a card you've explicitly starred
+never disappears from the Favorites tab just because it's currently priced
+below that floor, even though it wouldn't show up in the main grid on its
+own. `GET /api/price-tracker/cards?favoritesOnly=true` is the underlying
+endpoint (composable with the same `sort`/`color`/`setCode` params as the
+main list); `PUT`/`DELETE /api/price-tracker/favorites/:productId` toggle
+one card.
+
 ## Event Tracker
 
 Pulls tournament data from **[Limitless TCG](https://onepiece.limitlesstcg.com)**'s
@@ -328,7 +348,9 @@ survives redeploys instead of resetting.
 | Endpoint | Description |
 |---|---|
 | `GET /api/price-tracker/status` | Provider, thresholds, counts, last refresh time |
-| `GET /api/price-tracker/cards?alertsOnly=true&sort=pctChange\|weeklyChange\|dailyChange\|price\|name\|color\|set&color=&setCode=` | Card list with computed price-change/alert fields, filterable by color/setCode. `pctChange` sorts by the 30-day (`LOOKBACK_DAYS`) move and is null - so effectively unsorted - for every card until that much history has actually been collected; `weeklyChange`/`dailyChange` sort by the 7-day/1-day move instead, which have real values much sooner |
+| `GET /api/price-tracker/cards?alertsOnly=true&favoritesOnly=true&sort=pctChange\|weeklyChange\|dailyChange\|price\|name\|color\|set&color=&setCode=` | Card list with computed price-change/alert/favorite fields, filterable by color/setCode. `pctChange` sorts by the 30-day (`LOOKBACK_DAYS`) move and is null - so effectively unsorted - for every card until that much history has actually been collected; `weeklyChange`/`dailyChange` sort by the 7-day/1-day move instead, which have real values much sooner. `favoritesOnly` bypasses `MIN_DISPLAY_PRICE` - see [Favorites](#favorites) |
+| `PUT /api/price-tracker/favorites/:productId` | Mark a card as a favorite; returns its updated view, or 404 for an unknown productId |
+| `DELETE /api/price-tracker/favorites/:productId` | Unmark a favorite |
 | `GET /api/price-tracker/facets` | Distinct colors and sets actually present in the tracked cards (for populating filter dropdowns) |
 | `GET /api/price-tracker/cards/:productId/history` | Full daily price history for one card |
 | `POST /api/price-tracker/refresh` | Trigger an immediate price fetch |

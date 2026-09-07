@@ -11,6 +11,7 @@
     <h1>One Piece TCG Toolkit</h1>
     <nav class="tabs">
       <button class="tab active" type="button" id="tab-price-tracker">Price Tracker</button>
+      <button class="tab" type="button" id="tab-favorites">Favorites</button>
       <button class="tab" type="button" id="tab-event-tracker">Event Tracker</button>
     </nav>
   </header>
@@ -55,6 +56,27 @@
 
       <section id="cards-container" class="cards-grid" aria-live="polite">
         <p class="empty-state">Loading cards…</p>
+      </section>
+    </section>
+
+    <section id="view-favorites" class="view" hidden>
+      <section class="controls">
+        <div class="filter-group">
+          <label for="favorites-sort-select">Sort by</label>
+          <select id="favorites-sort-select">
+            <option value="pctChange">Biggest 30-day % change</option>
+            <option value="weeklyChange">Biggest 7-day % change</option>
+            <option value="dailyChange">Biggest 1-day % change</option>
+            <option value="price">Highest price</option>
+            <option value="name">Name</option>
+            <option value="color">Color</option>
+            <option value="set">Set</option>
+          </select>
+        </div>
+      </section>
+
+      <section id="favorites-container" class="cards-grid" aria-live="polite">
+        <p class="empty-state">Loading favorites…</p>
       </section>
     </section>
 
@@ -113,6 +135,7 @@
       <div class="card-img-wrap">
         <img class="card-img" alt="" />
         <span class="alert-badge" hidden>⚠ ALERT</span>
+        <button class="favorite-btn" type="button" aria-label="Toggle favorite" aria-pressed="false">☆</button>
       </div>
       <div class="card-body">
         <h3 class="card-name"></h3>

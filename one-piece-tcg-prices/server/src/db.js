@@ -8,7 +8,7 @@ const fs = require('fs');
 const path = require('path');
 const config = require('./config');
 
-const EMPTY_STATE = { cards: {}, snapshots: {}, events: {}, meta: {} };
+const EMPTY_STATE = { cards: {}, snapshots: {}, events: {}, meta: {}, favorites: {} };
 
 let state = null;
 
@@ -25,6 +25,7 @@ function load() {
   state.snapshots ||= {};
   state.events ||= {};
   state.meta ||= {};
+  state.favorites ||= {};
   return state;
 }
 
@@ -141,6 +142,24 @@ function getEvent(id) {
   return s.events[String(id)] || null;
 }
 
+function isFavorite(productId) {
+  const s = load();
+  return Boolean(s.favorites[String(productId)]);
+}
+
+function setFavorite(productId, favorite) {
+  const s = load();
+  const key = String(productId);
+  if (favorite) s.favorites[key] = true;
+  else delete s.favorites[key];
+  save();
+}
+
+function listFavoriteProductIds() {
+  const s = load();
+  return Object.keys(s.favorites);
+}
+
 function setMeta(key, value) {
   const s = load();
   s.meta[key] = value;
@@ -165,6 +184,9 @@ module.exports = {
   upsertEvent,
   listEvents,
   getEvent,
+  isFavorite,
+  setFavorite,
+  listFavoriteProductIds,
   setMeta,
   getMeta,
   flushSync,

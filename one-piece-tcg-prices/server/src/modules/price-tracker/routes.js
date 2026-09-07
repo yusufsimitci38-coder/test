@@ -9,10 +9,23 @@ router.get('/status', (req, res) => {
 
 router.get('/cards', (req, res) => {
   const alertsOnly = req.query.alertsOnly === 'true';
+  const favoritesOnly = req.query.favoritesOnly === 'true';
   const sort = req.query.sort || 'pctChange';
   const color = req.query.color || '';
   const setCode = req.query.setCode || '';
-  res.json(priceService.getCards({ alertsOnly, sort, color, setCode }));
+  res.json(priceService.getCards({ alertsOnly, favoritesOnly, sort, color, setCode }));
+});
+
+router.put('/favorites/:productId', (req, res) => {
+  const card = priceService.setFavorite(req.params.productId, true);
+  if (!card) return res.status(404).json({ error: 'Unknown card' });
+  res.json(card);
+});
+
+router.delete('/favorites/:productId', (req, res) => {
+  const card = priceService.setFavorite(req.params.productId, false);
+  if (!card) return res.status(404).json({ error: 'Unknown card' });
+  res.json(card);
 });
 
 router.get('/facets', (req, res) => {

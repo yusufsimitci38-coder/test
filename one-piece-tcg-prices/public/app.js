@@ -10,6 +10,8 @@ const el = {
   thresholdNote: document.getElementById('threshold-note'),
   container: document.getElementById('cards-container'),
   template: document.getElementById('card-template'),
+  favoritesContainer: document.getElementById('favorites-container'),
+  favoritesSortSelect: document.getElementById('favorites-sort-select'),
 };
 
 // Best-effort CSS color for each One Piece TCG color name, used for the
@@ -123,37 +125,83 @@ async function loadFacets() {
   }
 }
 
-async function loadCards() {
-  el.container.innerHTML = '<p class="empty-state">Loading cards…</p>';
-  const params = new URLSearchParams({
-    alertsOnly: el.alertsOnly.checked,
-    sort: el.sortSelect.value,
-    color: el.colorSelect.value,
-    setCode: el.setSelect.value,
-  });
+async function loadCardsInto(container, params, emptyMessage) {
+  container.innerHTML = '<p class="empty-state">Loading…</p>';
 
   let cards;
   try {
     cards = await fetchJson(`${API}/cards?${params}`);
   } catch (err) {
     console.error('Failed to load cards:', err);
-    el.container.innerHTML =
+    container.innerHTML =
       `<p class="empty-state">Couldn't load cards: ${err.message}<br />Check the server logs, or try "Refresh now".</p>`;
     return;
   }
 
   if (!cards.length) {
-    el.container.innerHTML = '<p class="empty-state">No cards yet. Click "Refresh now" to fetch prices.</p>';
+    container.innerHTML = `<p class="empty-state">${emptyMessage}</p>`;
     return;
   }
 
-  el.container.innerHTML = '';
+  container.innerHTML = '';
   for (const card of cards) {
-    el.container.appendChild(renderCard(card));
+    container.appendChild(renderCard(card, container));
   }
 }
 
-function renderCard(card) {
+function loadCards() {
+  const params = new URLSearchParams({
+    alertsOnly: el.alertsOnly.checked,
+    sort: el.sortSelect.value,
+    color: el.colorSelect.value,
+    setCode: el.setSelect.value,
+  });
+  return loadCardsInto(el.container, params, 'No cards yet. Click "Refresh now" to fetch prices.');
+}
+
+function loadFavorites() {
+  const params = new URLSearchParams({ favoritesOnly: 'true', sort: el.favoritesSortSelect.value });
+  return loadCardsInto(
+    el.favoritesContainer,
+    params,
+    'No favorites yet. Click the ☆ on any card in Price Tracker to add one.'
+  );
+}
+
+// `listContainer` is passed in so a card unfavorited from the Favorites tab
+// itself can be removed from view immediately - toggling a favorite never
+// removes it from the main Price Tracker grid, which isn't filtered by
+// favorite status.
+async function toggleFavorite(card, btn, listContainer) {
+  const next = !card.favorite;
+  btn.disabled = true;
+  try {
+    const updated = await fetchJson(`${API}/favorites/${card.productId}`, { method: next ? 'PUT' : 'DELETE' });
+    card.favorite = updated.favorite;
+    applyFavoriteState(btn, card.favorite);
+    if (!card.favorite && listContainer === el.favoritesContainer) {
+      const cardEl = btn.closest('.card');
+      cardEl?.remove();
+      if (!el.favoritesContainer.querySelector('.card')) {
+        el.favoritesContainer.innerHTML =
+          '<p class="empty-state">No favorites yet. Click the ☆ on any card in Price Tracker to add one.</p>';
+      }
+    }
+  } catch (err) {
+    console.error('Failed to update favorite:', err);
+    alert(`Couldn't update favorite: ${err.message}`);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function applyFavoriteState(btn, favorite) {
+  btn.textContent = favorite ? '★' : '☆';
+  btn.classList.toggle('is-favorite', favorite);
+  btn.setAttribute('aria-pressed', String(favorite));
+}
+
+function renderCard(card, listContainer) {
   const node = el.template.content.cloneNode(true);
   const root = node.querySelector('.card');
   if (card.alert) root.classList.add('is-alert');
@@ -167,6 +215,11 @@ function renderCard(card) {
   }
 
   node.querySelector('.alert-badge').hidden = !card.alert;
+
+  const favoriteBtn = node.querySelector('.favorite-btn');
+  applyFavoriteState(favoriteBtn, card.favorite);
+  favoriteBtn.addEventListener('click', () => toggleFavorite(card, favoriteBtn, listContainer));
+
   node.querySelector('.card-name').textContent = card.name;
   node.querySelector('.card-set-text').textContent = `${card.setName}${card.number ? ` · ${card.number}` : ''}`;
 
@@ -236,6 +289,12 @@ el.alertsOnly.addEventListener('change', loadCards);
 el.sortSelect.addEventListener('change', loadCards);
 el.colorSelect.addEventListener('change', loadCards);
 el.setSelect.addEventListener('change', loadCards);
+el.favoritesSortSelect.addEventListener('change', loadFavorites);
 
 loadStatus();
 loadFacets().then(loadCards);
+
+// Re-fetched every time the Favorites tab is opened (see nav.js), not just
+// once - a card can be favorited/unfavorited from the main Price Tracker
+// grid, so a one-time lazy load would go stale as soon as that happens.
+window.ensureFavoritesLoaded = loadFavorites;

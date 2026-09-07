@@ -62,6 +62,7 @@ function computeCardView(card) {
     pctChange,
     alert,
     direction,
+    favorite: db.isFavorite(productId),
     // The headline 30-day figure is provisional until we've actually
     // observed `lookbackDays` worth of snapshots for this card - current
     // price still shows immediately either way, this only gates the
@@ -77,11 +78,17 @@ function computeCardView(card) {
   };
 }
 
-function getCards({ alertsOnly = false, sort = 'pctChange', color = '', setCode = '' } = {}) {
+function getCards({ alertsOnly = false, favoritesOnly = false, sort = 'pctChange', color = '', setCode = '' } = {}) {
   let views = db.listCards().map(computeCardView);
-  // Cards with no price yet (currentPrice null) are never hidden by this -
-  // absence of a price isn't evidence the card belongs below the floor.
-  views = views.filter((v) => v.currentPrice == null || v.currentPrice >= config.minDisplayPrice);
+  if (favoritesOnly) {
+    // A favorite is an explicit choice - showing it never depends on
+    // whether it currently happens to be above the unrelated price floor.
+    views = views.filter((v) => v.favorite);
+  } else {
+    // Cards with no price yet (currentPrice null) are never hidden by this -
+    // absence of a price isn't evidence the card belongs below the floor.
+    views = views.filter((v) => v.currentPrice == null || v.currentPrice >= config.minDisplayPrice);
+  }
   if (alertsOnly) views = views.filter((v) => v.alert);
   if (color) views = views.filter((v) => (v.color || '') === color);
   if (setCode) views = views.filter((v) => (v.setCode || '') === setCode);
@@ -126,6 +133,15 @@ function getCardHistory(productId) {
   const card = db.getCard(productId);
   if (!card) return null;
   return { ...card, history: db.getSnapshots(productId) };
+}
+
+// Returns null (caller responds 404) for an unknown productId, otherwise
+// the card's updated view - so the frontend can update its star state from
+// the response instead of needing a second round-trip.
+function setFavorite(productId, favorite) {
+  if (!db.getCard(productId)) return null;
+  db.setFavorite(productId, favorite);
+  return computeCardView(db.getCard(productId));
 }
 
 function getStatus() {
@@ -189,6 +205,7 @@ module.exports = {
   getCardHistory,
   getStatus,
   getFacets,
+  setFavorite,
   debugSampleProduct,
   getLastFetchSummary,
   debugCard,
