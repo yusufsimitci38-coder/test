@@ -43,6 +43,11 @@ router.get('/debug/topdeck-sample', async (req, res) => {
       game: typeof req.query.game === 'string' && req.query.game ? req.query.game : undefined,
       format: typeof req.query.format === 'string' && req.query.format ? req.query.format : undefined,
       gameOmitted: req.query.omitGame === '1' || req.query.game === '',
+      // ?start=0 tests "since the beginning of time" - useful for telling
+      // apart "wrong game name" (still empty) from "no results after now
+      // specifically" (non-empty with start=0, confirming the game name is
+      // right but there's nothing currently scheduled).
+      start: typeof req.query.start === 'string' && req.query.start !== '' ? Number(req.query.start) : undefined,
     };
     res.json(await eventService.debugTopdeckRaw(overrides));
   } catch (err) {

@@ -153,11 +153,11 @@ async function fetchEvents() {
 // the live API without a redeploy per guess - pass gameOverride: null to
 // omit the game filter entirely (useful for seeing what game names come
 // back in a broader, unfiltered result).
-async function fetchSampleRaw({ game, format, gameOmitted } = {}) {
+async function fetchSampleRaw({ game, format, gameOmitted, start } = {}) {
   if (!config.topdeckApiKey) {
     return { configured: false, note: 'TOPDECK_API_KEY is not set - this integration is skipped entirely until it is.' };
   }
-  const payload = { start: Math.floor(Date.now() / 1000) };
+  const payload = { start: start != null ? start : Math.floor(Date.now() / 1000) };
   if (!gameOmitted) payload.game = game || GAME;
   if (format) payload.format = format;
   try {
