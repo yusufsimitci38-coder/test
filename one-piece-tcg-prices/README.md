@@ -172,16 +172,31 @@ value the primary source already had.
 
 Opt-in and additive only: unset `TOPDECK_API_KEY` (a free key from
 [topdeck.gg/developers](https://topdeck.gg/developers)) and this is skipped
-entirely, with no error - nothing else depends on it. Everything about the
-real request/response shape in `topdeckProvider.js` (the `game` filter
-value, response envelope, field names, timestamp units) is a best-effort
-reconstruction from TopDeck's docs page and search-indexed snippets of it,
-same as Bandai's registration-window scraping - this sandbox's network
-egress is blocked from `topdeck.gg` itself (confirmed by a direct probe,
-even with a real key), so none of it is verified against a live response
-yet. `GET /api/event-tracker/debug/topdeck-sample` returns the raw
-request/response (or error) once `TOPDECK_API_KEY` is set, for correcting
-those guesses against real evidence.
+entirely, with no error - nothing else depends on it.
+
+This sandbox's network egress is blocked from `topdeck.gg` itself (even
+with a real key), so the request/response shape in `topdeckProvider.js` was
+worked out entirely via `GET /api/event-tracker/debug/topdeck-sample`
+against the live API once a real key was available - the same
+debug-endpoint-plus-real-evidence pattern used for Limitless's detail
+endpoint and Bandai's registration-window scraping, just with more rounds
+of it. Confirmed the hard way: the request body requires **both** `game`
+*and* `format` - sending only `game` (as the first version of this file
+did) gets rejected outright with HTTP 400, which silently zeroed out the
+entire integration until caught. `game: "One Piece"` and `format:
+"Standard"` are both confirmed correct now. Per-tournament field names also
+turned out to differ from the initial guesses in a few places - notably
+`TID` (that exact casing) for the id, `tournamentName` for the name, and
+location nested under `eventData.address` rather than any top-level field -
+all fixed to match. Also worth knowing: `start` is a plain
+`startDate >= start` filter, not something that defaults to
+future-dated tournaments - a real response with `start=0` returned a
+*completed* tournament (full standings/decklists), so whether TopDeck has
+anything genuinely upcoming for One Piece at a given moment will vary. The
+debug endpoint accepts `?game=`/`?format=`/`?start=`/`?omitGame=1`
+overrides for testing candidate values directly against the live API
+without a redeploy per guess, which is how all of the above got nailed
+down - worth reaching for again if TopDeck's shape ever drifts.
 
 ### Region filter (English-speaking events)
 
