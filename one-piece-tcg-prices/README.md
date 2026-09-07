@@ -310,7 +310,7 @@ only file that would need to change for both modules to move with it.
 | Endpoint | Description |
 |---|---|
 | `GET /api/price-tracker/status` | Provider, thresholds, counts, last refresh time |
-| `GET /api/price-tracker/cards?alertsOnly=true&sort=pctChange\|weeklyChange\|price\|name\|color\|set&color=&setCode=` | Card list with computed price-change/alert fields, filterable by color/setCode. `pctChange` sorts by the 30-day (`LOOKBACK_DAYS`) move and is null - so effectively unsorted - for every card until that much history has actually been collected; `weeklyChange` sorts by the 7-day move instead, which has real values much sooner |
+| `GET /api/price-tracker/cards?alertsOnly=true&sort=pctChange\|weeklyChange\|dailyChange\|price\|name\|color\|set&color=&setCode=` | Card list with computed price-change/alert fields, filterable by color/setCode. `pctChange` sorts by the 30-day (`LOOKBACK_DAYS`) move and is null - so effectively unsorted - for every card until that much history has actually been collected; `weeklyChange`/`dailyChange` sort by the 7-day/1-day move instead, which have real values much sooner |
 | `GET /api/price-tracker/facets` | Distinct colors and sets actually present in the tracked cards (for populating filter dropdowns) |
 | `GET /api/price-tracker/cards/:productId/history` | Full daily price history for one card |
 | `POST /api/price-tracker/refresh` | Trigger an immediate price fetch |

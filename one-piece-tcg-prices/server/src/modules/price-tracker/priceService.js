@@ -90,6 +90,7 @@ function getCards({ alertsOnly = false, sort = 'pctChange', color = '', setCode 
     // that's meaningful well before then.
     pctChange: (a, b) => Math.abs(b.pctChange ?? 0) - Math.abs(a.pctChange ?? 0),
     weeklyChange: (a, b) => Math.abs(b.weeklyChangePct ?? 0) - Math.abs(a.weeklyChangePct ?? 0),
+    dailyChange: (a, b) => Math.abs(b.dailyChangePct ?? 0) - Math.abs(a.dailyChangePct ?? 0),
     price: (a, b) => (b.currentPrice ?? 0) - (a.currentPrice ?? 0),
     name: (a, b) => a.name.localeCompare(b.name),
     color: byString('color'),
