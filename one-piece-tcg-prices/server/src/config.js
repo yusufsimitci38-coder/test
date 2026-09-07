@@ -44,7 +44,16 @@ const config = {
   // error, when unset - this is opt-in, not a required credential.
   topdeckApiKey: process.env.TOPDECK_API_KEY || null,
 
-  dataFile: require('path').join(__dirname, '..', 'data', 'db.json'),
+  // Where the JSON data file lives. Defaults to a path inside the app's own
+  // directory tree - fine for local dev, but on a host with an ephemeral
+  // container filesystem (e.g. Railway without a mounted volume) that
+  // directory - and everything in it - gets wiped on every redeploy. Set
+  // DATA_DIR to a mounted persistent volume's path (e.g. Railway's Volumes
+  // feature - set this env var to whatever mount path you choose there) to
+  // survive redeploys instead.
+  dataDir: process.env.DATA_DIR || require('path').join(__dirname, '..', 'data'),
 };
+
+config.dataFile = require('path').join(config.dataDir, 'db.json');
 
 module.exports = config;

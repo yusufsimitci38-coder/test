@@ -296,15 +296,32 @@ Each module owns its own `/api/<module-name>` route namespace and its own
 folder under `src/modules/`, mounted the same way in `app.js` - a further
 module would follow the same pattern.
 
-Storage is a flat JSON file (`server/data/db.json`), rewritten in full on
-every debounced save. That's fine at `recent-sets` scale (a few hundred
-cards) or for the event tracker's much smaller event list, but with the
-price tracker's `all-sets` default (several thousand cards, one
-snapshot/day each) the file will grow into the tens of MB over a year and
-every save gets a bit slower - acceptable for a hobby project, but if a
-future module needs relational data (e.g. structured registrations), that's
-a natural point to move everything onto a real database. `db.js` is the
-only file that would need to change for both modules to move with it.
+Storage is a flat JSON file (`server/data/db.json` by default, or
+`$DATA_DIR/db.json` - see below), rewritten in full on every debounced
+save. That's fine at `recent-sets` scale (a few hundred cards) or for the
+event tracker's much smaller event list, but with the price tracker's
+`all-sets` default (several thousand cards, one snapshot/day each) the file
+will grow into the tens of MB over a year and every save gets a bit
+slower - acceptable for a hobby project, but if a future module needs
+relational data (e.g. structured registrations), that's a natural point to
+move everything onto a real database. `db.js` is the only file that would
+need to change for both modules to move with it.
+
+### Persistence across redeploys
+
+By default the data file lives inside the app's own directory tree, which
+is fine for local dev but sits on an ephemeral container filesystem on a
+host like Railway (without a mounted volume) - it gets wiped on every
+redeploy (a code push, or even just adding/changing an env var), and the
+app rebuilds it from scratch on next boot (price/event data re-fetches
+automatically; anything that can't be re-fetched from a source, like
+favorites, would just be gone).
+
+Set `DATA_DIR` to a mounted persistent volume's path to fix this properly:
+on Railway, add a Volume to the service (Settings → Volumes) with whatever
+mount path you choose (e.g. `/data`), then set the `DATA_DIR` environment
+variable to that same path. The data file (and everything in it) then
+survives redeploys instead of resetting.
 
 ## API
 
