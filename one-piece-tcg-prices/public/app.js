@@ -81,9 +81,14 @@ async function loadStatus() {
     const status = await fetchJson(`${API}/status`);
     el.statusText.textContent = `Provider: ${status.provider} · ${status.cardCount} cards tracked · ` +
       `${status.alertCount} alert(s) · last refreshed ${fmtDate(status.lastRefreshAt)}`;
+    const historyNote =
+      status.historyDaysCollected < status.thresholds.lookbackDays
+        ? ` Still collecting history (${status.historyDaysCollected}/${status.thresholds.lookbackDays} days) - ` +
+          `"Biggest 30-day % change" won't show real differences until then; try "Biggest 7-day % change" instead.`
+        : '';
     el.thresholdNote.textContent =
       `Alerting on cards ≥ $${status.thresholds.minPrice} with a ≥ ${status.thresholds.pctChange}% ` +
-      `move over the last ${status.thresholds.lookbackDays} days.`;
+      `move over the last ${status.thresholds.lookbackDays} days.${historyNote}`;
   } catch (err) {
     console.error('Failed to load status:', err);
     el.statusText.textContent = `Couldn't reach the server (${err.message}). Check server logs.`;

@@ -85,7 +85,11 @@ function getCards({ alertsOnly = false, sort = 'pctChange', color = '', setCode 
 
   const byString = (key) => (a, b) => (a[key] || '').localeCompare(b[key] || '');
   const sorters = {
+    // Needs `lookbackDays` (30, by default) worth of history to be
+    // anything but null for every card - see weeklyChange below for a sort
+    // that's meaningful well before then.
     pctChange: (a, b) => Math.abs(b.pctChange ?? 0) - Math.abs(a.pctChange ?? 0),
+    weeklyChange: (a, b) => Math.abs(b.weeklyChangePct ?? 0) - Math.abs(a.weeklyChangePct ?? 0),
     price: (a, b) => (b.currentPrice ?? 0) - (a.currentPrice ?? 0),
     name: (a, b) => a.name.localeCompare(b.name),
     color: byString('color'),
@@ -122,7 +126,12 @@ function getCardHistory(productId) {
 
 function getStatus() {
   const cards = db.listCards();
-  const alertCount = cards.map(computeCardView).filter((c) => c.alert).length;
+  const views = cards.map(computeCardView);
+  const alertCount = views.filter((c) => c.alert).length;
+  // How far along the 30-day (by default) history window actually is right
+  // now - the UI uses this to explain why sorting by the 30-day change
+  // looks like a no-op (every card ties at null) until this catches up.
+  const historyDaysCollected = views.length ? Math.max(...views.map((v) => v.historyDaysCollected)) : 0;
   return {
     provider: config.priceProvider,
     lastRefreshAt: db.getMeta('lastRefreshAt') || null,
@@ -130,6 +139,7 @@ function getStatus() {
     alertCount,
     thresholds: { minPrice: config.alertMinPrice, pctChange: config.alertPctChange, lookbackDays: config.lookbackDays },
     watchlist: config.watchlist,
+    historyDaysCollected,
   };
 }
 

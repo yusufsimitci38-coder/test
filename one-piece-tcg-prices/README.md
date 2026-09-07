@@ -73,7 +73,7 @@ can see full functionality without waiting.
 |---|---|---|
 | `PORT` | `4000` | HTTP port |
 | `PRICE_PROVIDER` | `tcgcsv` | `tcgcsv` (live data) or `mock` (offline demo data) |
-| `ALERT_MIN_PRICE` | `4` | Minimum current price to be alert-eligible |
+| `ALERT_MIN_PRICE` | `2` | Minimum current price to be alert-eligible |
 | `ALERT_PCT_CHANGE` | `20` | Minimum absolute % move to alert on |
 | `LOOKBACK_DAYS` | `30` | Comparison window |
 | `WATCHLIST_MODE` | `all-sets` | `all-sets`, `recent-sets`, or `named-sets` |
@@ -310,7 +310,7 @@ only file that would need to change for both modules to move with it.
 | Endpoint | Description |
 |---|---|
 | `GET /api/price-tracker/status` | Provider, thresholds, counts, last refresh time |
-| `GET /api/price-tracker/cards?alertsOnly=true&sort=pctChange\|price\|name\|color\|set&color=&setCode=` | Card list with computed price-change/alert fields, filterable by color/setCode |
+| `GET /api/price-tracker/cards?alertsOnly=true&sort=pctChange\|weeklyChange\|price\|name\|color\|set&color=&setCode=` | Card list with computed price-change/alert fields, filterable by color/setCode. `pctChange` sorts by the 30-day (`LOOKBACK_DAYS`) move and is null - so effectively unsorted - for every card until that much history has actually been collected; `weeklyChange` sorts by the 7-day move instead, which has real values much sooner |
 | `GET /api/price-tracker/facets` | Distinct colors and sets actually present in the tracked cards (for populating filter dropdowns) |
 | `GET /api/price-tracker/cards/:productId/history` | Full daily price history for one card |
 | `POST /api/price-tracker/refresh` | Trigger an immediate price fetch |

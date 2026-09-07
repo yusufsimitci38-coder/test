@@ -9,7 +9,7 @@ const config = {
   port: num(process.env.PORT, 4000),
   priceProvider: process.env.PRICE_PROVIDER || 'tcgcsv',
 
-  alertMinPrice: num(process.env.ALERT_MIN_PRICE, 4),
+  alertMinPrice: num(process.env.ALERT_MIN_PRICE, 2),
   alertPctChange: num(process.env.ALERT_PCT_CHANGE, 20),
   lookbackDays: num(process.env.LOOKBACK_DAYS, 30),
 
