@@ -57,7 +57,12 @@ async function postJson(payload) {
       body: JSON.stringify(payload),
     });
     if (!res.ok) {
-      throw new Error(`${API_URL} -> HTTP ${res.status}`);
+      // A 4xx validation error often names the actual problem (e.g. which
+      // game values are valid) in its body - worth surfacing verbatim
+      // rather than just the status code, especially while the request
+      // shape here is still an unverified guess (see file header).
+      const bodyText = await res.text().catch(() => '');
+      throw new Error(`${API_URL} -> HTTP ${res.status}${bodyText ? `: ${bodyText.slice(0, 500)}` : ''}`);
     }
     return await res.json();
   } finally {
@@ -143,12 +148,18 @@ async function fetchEvents() {
 
 // Diagnostic only: the raw request/response (or error), for checking the
 // real field shape against the guesses above - used by
-// GET /api/event-tracker/debug/topdeck-sample.
-async function fetchSampleRaw() {
+// GET /api/event-tracker/debug/topdeck-sample. Accepts overrides (e.g.
+// ?game=One+Piece+TCG) so candidate values can be tried directly against
+// the live API without a redeploy per guess - pass gameOverride: null to
+// omit the game filter entirely (useful for seeing what game names come
+// back in a broader, unfiltered result).
+async function fetchSampleRaw({ game, format, gameOmitted } = {}) {
   if (!config.topdeckApiKey) {
     return { configured: false, note: 'TOPDECK_API_KEY is not set - this integration is skipped entirely until it is.' };
   }
-  const payload = { game: GAME, start: Math.floor(Date.now() / 1000) };
+  const payload = { start: Math.floor(Date.now() / 1000) };
+  if (!gameOmitted) payload.game = game || GAME;
+  if (format) payload.format = format;
   try {
     const raw = await postJson(payload);
     return { configured: true, requestPayload: payload, ok: true, raw };

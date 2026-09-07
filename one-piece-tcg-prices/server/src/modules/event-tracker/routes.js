@@ -35,7 +35,16 @@ router.get('/debug/bandai-raw', async (req, res) => {
 
 router.get('/debug/topdeck-sample', async (req, res) => {
   try {
-    res.json(await eventService.debugTopdeckRaw());
+    // ?game=<value> tries a candidate game filter against the live API;
+    // ?game= (empty) or ?omitGame=1 omits the game filter entirely - see
+    // topdeckProvider.fetchSampleRaw for why this is useful while the
+    // correct value is still unconfirmed.
+    const overrides = {
+      game: typeof req.query.game === 'string' && req.query.game ? req.query.game : undefined,
+      format: typeof req.query.format === 'string' && req.query.format ? req.query.format : undefined,
+      gameOmitted: req.query.omitGame === '1' || req.query.game === '',
+    };
+    res.json(await eventService.debugTopdeckRaw(overrides));
   } catch (err) {
     console.error('[event-tracker] debug topdeck-sample failed:', err);
     res.status(502).json({ error: err.message });

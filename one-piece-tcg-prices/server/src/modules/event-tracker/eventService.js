@@ -96,8 +96,8 @@ async function debugBandaiRaw() {
   return bandaiRegistration.fetchRawText();
 }
 
-async function debugTopdeckRaw() {
-  return topdeckProvider.fetchSampleRaw();
+async function debugTopdeckRaw(overrides) {
+  return topdeckProvider.fetchSampleRaw(overrides);
 }
 
 module.exports = {
