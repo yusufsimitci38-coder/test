@@ -73,9 +73,10 @@ can see full functionality without waiting.
 |---|---|---|
 | `PORT` | `4000` | HTTP port |
 | `PRICE_PROVIDER` | `tcgcsv` | `tcgcsv` (live data) or `mock` (offline demo data) |
-| `ALERT_MIN_PRICE` | `2` | Minimum current price to be alert-eligible |
+| `ALERT_MIN_PRICE` | `4` | Minimum current price to be alert-eligible |
 | `ALERT_PCT_CHANGE` | `20` | Minimum absolute % move to alert on |
 | `LOOKBACK_DAYS` | `30` | Comparison window |
+| `MIN_DISPLAY_PRICE` | `2` | Display-only floor: cards priced below this are hidden from the card list entirely (independent of `ALERT_MIN_PRICE` - a card can be shown but never alert-eligible, and cards below this floor are hidden regardless of alert status). A card with no price yet is never hidden by this. |
 | `WATCHLIST_MODE` | `all-sets` | `all-sets`, `recent-sets`, or `named-sets` |
 | `RECENT_SET_COUNT` | `8` | Sets tracked when mode is `recent-sets` |
 | `WATCHLIST_SET_NAMES` | *(empty)* | Comma-separated set names when mode is `named-sets` |

@@ -86,9 +86,12 @@ async function loadStatus() {
         ? ` Still collecting history (${status.historyDaysCollected}/${status.thresholds.lookbackDays} days) - ` +
           `"Biggest 30-day % change" won't show real differences until then; try "Biggest 7-day % change" instead.`
         : '';
+    const hiddenNote = status.hiddenBelowMinPrice
+      ? ` ${status.hiddenBelowMinPrice} card(s) under $${status.thresholds.minDisplayPrice} hidden from the list below.`
+      : '';
     el.thresholdNote.textContent =
       `Alerting on cards ≥ $${status.thresholds.minPrice} with a ≥ ${status.thresholds.pctChange}% ` +
-      `move over the last ${status.thresholds.lookbackDays} days.${historyNote}`;
+      `move over the last ${status.thresholds.lookbackDays} days.${hiddenNote}${historyNote}`;
   } catch (err) {
     console.error('Failed to load status:', err);
     el.statusText.textContent = `Couldn't reach the server (${err.message}). Check server logs.`;

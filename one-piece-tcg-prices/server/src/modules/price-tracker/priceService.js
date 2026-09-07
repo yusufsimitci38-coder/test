@@ -79,6 +79,9 @@ function computeCardView(card) {
 
 function getCards({ alertsOnly = false, sort = 'pctChange', color = '', setCode = '' } = {}) {
   let views = db.listCards().map(computeCardView);
+  // Cards with no price yet (currentPrice null) are never hidden by this -
+  // absence of a price isn't evidence the card belongs below the floor.
+  views = views.filter((v) => v.currentPrice == null || v.currentPrice >= config.minDisplayPrice);
   if (alertsOnly) views = views.filter((v) => v.alert);
   if (color) views = views.filter((v) => (v.color || '') === color);
   if (setCode) views = views.filter((v) => (v.setCode || '') === setCode);
@@ -133,14 +136,23 @@ function getStatus() {
   // now - the UI uses this to explain why sorting by the 30-day change
   // looks like a no-op (every card ties at null) until this catches up.
   const historyDaysCollected = views.length ? Math.max(...views.map((v) => v.historyDaysCollected)) : 0;
+  const hiddenBelowMinPrice = views.filter(
+    (v) => v.currentPrice != null && v.currentPrice < config.minDisplayPrice
+  ).length;
   return {
     provider: config.priceProvider,
     lastRefreshAt: db.getMeta('lastRefreshAt') || null,
     cardCount: cards.length,
     alertCount,
-    thresholds: { minPrice: config.alertMinPrice, pctChange: config.alertPctChange, lookbackDays: config.lookbackDays },
+    thresholds: {
+      minPrice: config.alertMinPrice,
+      pctChange: config.alertPctChange,
+      lookbackDays: config.lookbackDays,
+      minDisplayPrice: config.minDisplayPrice,
+    },
     watchlist: config.watchlist,
     historyDaysCollected,
+    hiddenBelowMinPrice,
   };
 }
 
