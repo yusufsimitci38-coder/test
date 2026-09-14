@@ -1,0 +1,289 @@
+const EVENT_API = '/api/event-tracker';
+
+const evEl = {
+  statusText: document.getElementById('event-status-text'),
+  refreshBtn: document.getElementById('event-refresh-btn'),
+  showNonEnglish: document.getElementById('show-non-english'),
+  grid: document.getElementById('calendar-grid'),
+  monthLabel: document.getElementById('cal-month-label'),
+  prevBtn: document.getElementById('cal-prev'),
+  nextBtn: document.getElementById('cal-next'),
+  todayBtn: document.getElementById('cal-today'),
+  dayDetail: document.getElementById('day-detail'),
+  dayDetailTitle: document.getElementById('day-detail-title'),
+  dayDetailList: document.getElementById('day-detail-list'),
+  regWindowsList: document.getElementById('reg-windows-list'),
+};
+
+let currentMonth = new Date(); // day-of-month is irrelevant, only year/month used
+let eventsLoadedOnce = false;
+let lastFetchedEvents = [];
+let lastFetchedWindows = [];
+
+async function fetchJsonEv(url) {
+  const res = await fetch(url);
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`${url} -> HTTP ${res.status}${body ? `: ${body.slice(0, 200)}` : ''}`);
+  }
+  return res.json();
+}
+
+function monthKey(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+// isEnglishSpeaking defaults to visible (true) when missing/undefined, so
+// older cached data or an unexpected shape never silently hides everything.
+function isVisible(item) {
+  return evEl.showNonEnglish.checked || item.isEnglishSpeaking !== false;
+}
+
+async function loadEventStatus() {
+  try {
+    const status = await fetchJsonEv(`${EVENT_API}/status`);
+    evEl.statusText.textContent =
+      `Provider: ${status.provider} · ${status.eventCount} events tracked · ` +
+      `last refreshed ${status.lastRefreshAt ? new Date(status.lastRefreshAt).toLocaleString() : 'never'}`;
+  } catch (err) {
+    console.error('Failed to load event status:', err);
+    evEl.statusText.textContent = `Couldn't reach the server (${err.message}). Check server logs.`;
+  }
+}
+
+async function loadCalendar() {
+  evEl.monthLabel.textContent = currentMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+  evEl.grid.innerHTML = '<p class="empty-state">Loading events…</p>';
+  evEl.dayDetail.hidden = true;
+
+  try {
+    lastFetchedEvents = await fetchJsonEv(`${EVENT_API}/events?month=${monthKey(currentMonth)}`);
+  } catch (err) {
+    console.error('Failed to load events:', err);
+    evEl.grid.innerHTML = `<p class="empty-state">Couldn't load events: ${err.message}<br />Check the server logs, or try "Refresh now".</p>`;
+    return;
+  }
+
+  renderGrid();
+}
+
+function renderGrid() {
+  const events = lastFetchedEvents.filter(isVisible);
+
+  const byDay = new Map(); // 'YYYY-MM-DD' -> event[]
+  for (const e of events) {
+    if (!e.date) continue;
+    const day = e.date.slice(0, 10);
+    if (!byDay.has(day)) byDay.set(day, []);
+    byDay.get(day).push(e);
+  }
+
+  const year = currentMonth.getFullYear();
+  const month = currentMonth.getMonth();
+  const startWeekday = new Date(year, month, 1).getDay(); // 0 = Sunday
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const todayStr = new Date().toISOString().slice(0, 10);
+
+  const cells = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(
+    (wd) => `<div class="cal-weekday">${wd}</div>`
+  );
+
+  for (let i = 0; i < startWeekday; i += 1) {
+    cells.push('<div class="cal-cell cal-empty"></div>');
+  }
+
+  const MAX_VISIBLE = 3;
+  for (let d = 1; d <= daysInMonth; d += 1) {
+    const dayStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const dayEvents = byDay.get(dayStr) || [];
+    const pills = dayEvents
+      .slice(0, MAX_VISIBLE)
+      .map(
+        (e) =>
+          `<div class="cal-event" title="${escapeHtml(e.location || '')}">${escapeHtml(e.name)}</div>`
+      )
+      .join('');
+    const more = dayEvents.length > MAX_VISIBLE ? `<div class="cal-more">+${dayEvents.length - MAX_VISIBLE} more</div>` : '';
+    const classes = ['cal-cell'];
+    if (dayStr === todayStr) classes.push('cal-today');
+    if (dayEvents.length) classes.push('cal-has-events');
+    cells.push(
+      `<div class="${classes.join(' ')}" data-day="${dayStr}"><div class="cal-daynum">${d}</div>${pills}${more}</div>`
+    );
+  }
+
+  // Pad the final week out to a full 7 columns so the grid's own background
+  // doesn't peek through an incomplete last row.
+  while (cells.length % 7 !== 0) {
+    cells.push('<div class="cal-cell cal-empty"></div>');
+  }
+
+  evEl.grid.innerHTML = cells.join('');
+
+  evEl.grid.querySelectorAll('.cal-cell[data-day]').forEach((cell) => {
+    cell.addEventListener('click', () => showDayDetail(cell.dataset.day, byDay.get(cell.dataset.day) || []));
+  });
+
+  evEl.dayDetail.hidden = true;
+}
+
+function showDayDetail(dayStr, events) {
+  if (!events.length) {
+    evEl.dayDetail.hidden = true;
+    return;
+  }
+  evEl.dayDetail.hidden = false;
+  evEl.dayDetailTitle.textContent = new Date(`${dayStr}T00:00:00`).toLocaleDateString(undefined, {
+    weekday: 'long',
+    month: 'long',
+    day: 'numeric',
+    year: 'numeric',
+  });
+  evEl.dayDetailList.innerHTML = events
+    .map((e) => {
+      const time = e.date
+        ? new Date(e.date).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+        : null;
+      return `
+        <li>
+          <a href="${e.url || '#'}" target="_blank" rel="noopener noreferrer">${escapeHtml(e.name)}</a>
+          ${e.location ? `<p class="day-detail-location">📍 ${escapeHtml(e.location)}</p>` : ''}
+          <div class="day-detail-meta">
+            ${time ? `<span>${time}</span>` : ''}
+            ${e.format ? `<span>${escapeHtml(e.format)}</span>` : ''}
+            ${e.organizer ? `<span>${escapeHtml(e.organizer)}</span>` : ''}
+            ${e.players != null ? `<span>${e.players} players</span>` : ''}
+          </div>
+        </li>
+      `;
+    })
+    .join('');
+}
+
+async function loadRegistrationWindows() {
+  try {
+    const data = await fetchJsonEv(`${EVENT_API}/registration-windows`);
+    lastFetchedWindows = data.windows || [];
+  } catch (err) {
+    console.error('Failed to load registration windows:', err);
+    evEl.regWindowsList.innerHTML = `<p class="empty-state">Couldn't load registration windows: ${err.message}</p>`;
+    return;
+  }
+  renderRegistrationWindows();
+}
+
+// Parses the leading day out of a "March 21-22, 2026" / "June 6, 2026"
+// style range string, for sorting - not full parsing, just enough to order
+// entries chronologically. Returns Infinity (sorts last) on anything
+// unexpected, rather than throwing.
+function firstDateOf(rangeStr) {
+  const m = /^([A-Za-z]+)\s+(\d{1,2})(?:-\d{1,2})?,?\s*(\d{4})/.exec(rangeStr || '');
+  if (!m) return Infinity;
+  const parsed = new Date(`${m[1]} ${m[2]}, ${m[3]}`);
+  return Number.isNaN(parsed.getTime()) ? Infinity : parsed.getTime();
+}
+
+function renderRegistrationWindows() {
+  const windows = lastFetchedWindows
+    .filter(isVisible)
+    .slice()
+    .sort((a, b) => firstDateOf(a.eventDate) - firstDateOf(b.eventDate));
+
+  if (!windows.length) {
+    evEl.regWindowsList.innerHTML = lastFetchedWindows.length
+      ? '<p class="empty-state">All found windows are hidden by the region filter above.</p>'
+      : '<p class="empty-state">None found yet — check back after the next refresh, or verify directly on the official page above.</p>';
+    return;
+  }
+
+  evEl.regWindowsList.innerHTML = `
+    <table class="reg-table">
+      <thead>
+        <tr>
+          <th>Region</th>
+          <th>Organizer</th>
+          <th>Event date</th>
+          <th>Venue</th>
+          <th>Registration opens</th>
+          <th>Register</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${windows
+          .map((w) => {
+            const opens = w.registrationOpensOn
+              ? `${escapeHtml(w.registrationOpensOn)}${
+                  w.registrationOpensTimeGuideline
+                    ? `<br /><span class="reg-time-guideline">~${escapeHtml(w.registrationOpensTimeGuideline)} (guideline only - see link)</span>`
+                    : ''
+                }`
+              : '—';
+            return `
+          <tr>
+            <td>${w.region ? escapeHtml(w.region) : '—'}</td>
+            <td>${escapeHtml(w.organizer || w.season || '')}</td>
+            <td>${escapeHtml(w.eventDate || '—')}</td>
+            <td>${w.venue ? escapeHtml(w.venue) : '—'}</td>
+            <td>${opens}</td>
+            <td>${
+              w.registrationUrl
+                ? `<a href="${w.registrationUrl}" target="_blank" rel="noopener noreferrer">Register ↗</a>`
+                : `<a href="${w.sourceUrl}" target="_blank" rel="noopener noreferrer">Official page ↗</a>`
+            }</td>
+          </tr>
+        `;
+          })
+          .join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+async function refreshEvents() {
+  evEl.refreshBtn.disabled = true;
+  evEl.refreshBtn.textContent = 'Refreshing…';
+  try {
+    await fetch(`${EVENT_API}/refresh`, { method: 'POST' });
+    await Promise.all([loadEventStatus(), loadCalendar(), loadRegistrationWindows()]);
+  } catch (err) {
+    console.error(err);
+    alert('Refresh failed. Check the server logs.');
+  } finally {
+    evEl.refreshBtn.disabled = false;
+    evEl.refreshBtn.textContent = 'Refresh now';
+  }
+}
+
+function changeMonth(delta) {
+  currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1);
+  loadCalendar();
+}
+
+evEl.refreshBtn.addEventListener('click', refreshEvents);
+evEl.prevBtn.addEventListener('click', () => changeMonth(-1));
+evEl.nextBtn.addEventListener('click', () => changeMonth(1));
+evEl.todayBtn.addEventListener('click', () => {
+  currentMonth = new Date();
+  loadCalendar();
+});
+// Toggling re-renders from the already-fetched lists - no need to re-fetch.
+evEl.showNonEnglish.addEventListener('change', () => {
+  renderGrid();
+  renderRegistrationWindows();
+});
+
+// Loaded lazily the first time the Event Tracker tab is opened (see nav.js),
+// so viewing prices never triggers an event-tracker request.
+window.ensureEventsLoaded = function ensureEventsLoaded() {
+  if (eventsLoadedOnce) return;
+  eventsLoadedOnce = true;
+  loadEventStatus();
+  loadCalendar();
+  loadRegistrationWindows();
+};
