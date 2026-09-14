@@ -271,6 +271,36 @@ main {
 
 .calendar-controls button:hover { border-color: var(--accent); }
 
+.pager {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin: 0.75rem 0;
+  min-height: 2.25rem;
+}
+
+.pager:empty { margin: 0; min-height: 0; }
+
+.pager-info {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+
+.pager button {
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.35rem 0.85rem;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.pager button:hover:not(:disabled) { border-color: var(--accent); }
+.pager button:disabled { opacity: 0.4; cursor: default; }
+
 .calendar-grid {
   display: grid;
   grid-template-columns: repeat(7, 1fr);

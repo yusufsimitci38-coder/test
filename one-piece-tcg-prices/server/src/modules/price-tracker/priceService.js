@@ -78,7 +78,18 @@ function computeCardView(card) {
   };
 }
 
-function getCards({ alertsOnly = false, favoritesOnly = false, sort = 'pctChange', color = '', setCode = '' } = {}) {
+const DEFAULT_PAGE_SIZE = 50;
+const MAX_PAGE_SIZE = 200;
+
+function getCards({
+  alertsOnly = false,
+  favoritesOnly = false,
+  sort = 'pctChange',
+  color = '',
+  setCode = '',
+  page = 1,
+  pageSize = DEFAULT_PAGE_SIZE,
+} = {}) {
   let views = db.listCards().map(computeCardView);
   if (favoritesOnly) {
     // A favorite is an explicit choice - showing it never depends on
@@ -107,7 +118,20 @@ function getCards({ alertsOnly = false, favoritesOnly = false, sort = 'pctChange
     set: byString('setCode'),
   };
   views.sort(sorters[sort] || sorters.pctChange);
-  return views;
+
+  const totalCount = views.length;
+  const clampedPageSize = Math.min(Math.max(1, Math.trunc(pageSize) || DEFAULT_PAGE_SIZE), MAX_PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(totalCount / clampedPageSize));
+  const clampedPage = Math.min(Math.max(1, Math.trunc(page) || 1), totalPages);
+  const start = (clampedPage - 1) * clampedPageSize;
+
+  return {
+    cards: views.slice(start, start + clampedPageSize),
+    page: clampedPage,
+    pageSize: clampedPageSize,
+    totalCount,
+    totalPages,
+  };
 }
 
 // Distinct filter values actually present in the tracked cards, so the UI

@@ -1,4 +1,5 @@
 const API = '/api/price-tracker';
+const PAGE_SIZE = 50;
 
 const el = {
   statusText: document.getElementById('status-text'),
@@ -10,9 +11,18 @@ const el = {
   thresholdNote: document.getElementById('threshold-note'),
   container: document.getElementById('cards-container'),
   template: document.getElementById('card-template'),
+  cardsPagerTop: document.getElementById('cards-pager-top'),
+  cardsPagerBottom: document.getElementById('cards-pager-bottom'),
+  priceView: document.getElementById('view-price-tracker'),
   favoritesContainer: document.getElementById('favorites-container'),
   favoritesSortSelect: document.getElementById('favorites-sort-select'),
+  favoritesPagerTop: document.getElementById('favorites-pager-top'),
+  favoritesPagerBottom: document.getElementById('favorites-pager-bottom'),
+  favoritesView: document.getElementById('view-favorites'),
 };
+
+let pricePage = 1;
+let favoritesPage = 1;
 
 // Best-effort CSS color for each One Piece TCG color name, used for the
 // small swatch dot on each card. A dual-color card (e.g. "Blue/Purple")
@@ -125,68 +135,123 @@ async function loadFacets() {
   }
 }
 
-async function loadCardsInto(container, params, emptyMessage) {
-  container.innerHTML = '<p class="empty-state">Loading…</p>';
+// Smooth, not instant - scrolls back to the top of the given view (filters
+// bar and all) after a page change, rather than jumping straight there.
+function scrollToTopOf(target) {
+  target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
 
-  let cards;
+function pagerInnerHtml(data) {
+  if (!data || data.totalPages <= 1) return '';
+  const prevDisabled = data.page <= 1 ? 'disabled' : '';
+  const nextDisabled = data.page >= data.totalPages ? 'disabled' : '';
+  return (
+    `<button type="button" class="pager-prev" ${prevDisabled}>‹ Prev</button>` +
+    `<span class="pager-info">Page ${data.page} of ${data.totalPages} · ${data.totalCount} cards</span>` +
+    `<button type="button" class="pager-next" ${nextDisabled}>Next ›</button>`
+  );
+}
+
+// Both the top and bottom pager (above/below the grid) always mirror each
+// other, so paging works the same whether you're at the top of the list or
+// scrolled to the bottom.
+function renderPagers(pagerTop, pagerBottom, data, onPageChange) {
+  const html = pagerInnerHtml(data);
+  for (const pagerEl of [pagerTop, pagerBottom]) {
+    pagerEl.innerHTML = html;
+    const prevBtn = pagerEl.querySelector('.pager-prev');
+    const nextBtn = pagerEl.querySelector('.pager-next');
+    if (prevBtn) prevBtn.addEventListener('click', () => onPageChange(data.page - 1));
+    if (nextBtn) nextBtn.addEventListener('click', () => onPageChange(data.page + 1));
+  }
+}
+
+async function loadCardsInto(container, pagerTop, pagerBottom, params, page, emptyMessage, onPageChange) {
+  container.innerHTML = '<p class="empty-state">Loading…</p>';
+  pagerTop.innerHTML = '';
+  pagerBottom.innerHTML = '';
+  params.set('page', page);
+  params.set('pageSize', PAGE_SIZE);
+
+  let data;
   try {
-    cards = await fetchJson(`${API}/cards?${params}`);
+    data = await fetchJson(`${API}/cards?${params}`);
   } catch (err) {
     console.error('Failed to load cards:', err);
     container.innerHTML =
       `<p class="empty-state">Couldn't load cards: ${err.message}<br />Check the server logs, or try "Refresh now".</p>`;
-    return;
+    return null;
   }
 
-  if (!cards.length) {
+  if (!data.cards.length) {
     container.innerHTML = `<p class="empty-state">${emptyMessage}</p>`;
-    return;
+    return data;
   }
 
   container.innerHTML = '';
-  for (const card of cards) {
+  for (const card of data.cards) {
     container.appendChild(renderCard(card, container));
   }
+
+  renderPagers(pagerTop, pagerBottom, data, onPageChange);
+  return data;
 }
 
-function loadCards() {
+async function loadCards(page = pricePage) {
   const params = new URLSearchParams({
     alertsOnly: el.alertsOnly.checked,
     sort: el.sortSelect.value,
     color: el.colorSelect.value,
     setCode: el.setSelect.value,
   });
-  return loadCardsInto(el.container, params, 'No cards yet. Click "Refresh now" to fetch prices.');
+  const data = await loadCardsInto(
+    el.container,
+    el.cardsPagerTop,
+    el.cardsPagerBottom,
+    params,
+    page,
+    'No cards yet. Click "Refresh now" to fetch prices.',
+    (newPage) => {
+      loadCards(newPage);
+      scrollToTopOf(el.priceView);
+    }
+  );
+  if (data) pricePage = data.page; // server clamps out-of-range pages - stay in sync with it
 }
 
-function loadFavorites() {
+async function loadFavorites(page = favoritesPage) {
   const params = new URLSearchParams({ favoritesOnly: 'true', sort: el.favoritesSortSelect.value });
-  return loadCardsInto(
+  const data = await loadCardsInto(
     el.favoritesContainer,
+    el.favoritesPagerTop,
+    el.favoritesPagerBottom,
     params,
-    'No favorites yet. Click the ☆ on any card in Price Tracker to add one.'
+    page,
+    'No favorites yet. Click the ☆ on any card in Price Tracker to add one.',
+    (newPage) => {
+      loadFavorites(newPage);
+      scrollToTopOf(el.favoritesView);
+    }
   );
+  if (data) favoritesPage = data.page;
 }
 
 // `listContainer` is passed in so a card unfavorited from the Favorites tab
-// itself can be removed from view immediately - toggling a favorite never
-// removes it from the main Price Tracker grid, which isn't filtered by
-// favorite status.
+// itself triggers a reload of that tab (removing it from view and keeping
+// the pager's counts accurate) - toggling a favorite never removes it from
+// the main Price Tracker grid, which isn't filtered by favorite status, so
+// that one just updates the button in place.
 async function toggleFavorite(card, btn, listContainer) {
   const next = !card.favorite;
   btn.disabled = true;
   try {
     const updated = await fetchJson(`${API}/favorites/${card.productId}`, { method: next ? 'PUT' : 'DELETE' });
     card.favorite = updated.favorite;
-    applyFavoriteState(btn, card.favorite);
     if (!card.favorite && listContainer === el.favoritesContainer) {
-      const cardEl = btn.closest('.card');
-      cardEl?.remove();
-      if (!el.favoritesContainer.querySelector('.card')) {
-        el.favoritesContainer.innerHTML =
-          '<p class="empty-state">No favorites yet. Click the ☆ on any card in Price Tracker to add one.</p>';
-      }
+      await loadFavorites(favoritesPage);
+      return;
     }
+    applyFavoriteState(btn, card.favorite);
   } catch (err) {
     console.error('Failed to update favorite:', err);
     alert(`Couldn't update favorite: ${err.message}`);
@@ -274,7 +339,7 @@ async function refresh() {
   el.refreshBtn.textContent = 'Refreshing…';
   try {
     await fetch(`${API}/refresh`, { method: 'POST' });
-    await Promise.all([loadStatus(), loadFacets(), loadCards()]);
+    await Promise.all([loadStatus(), loadFacets(), loadCards(1)]);
   } catch (err) {
     console.error(err);
     alert('Refresh failed. Check the server logs.');
@@ -284,17 +349,19 @@ async function refresh() {
   }
 }
 
+// Any filter/sort change starts back over at page 1 - the old page number
+// might not even exist in the new, differently-filtered result set.
 el.refreshBtn.addEventListener('click', refresh);
-el.alertsOnly.addEventListener('change', loadCards);
-el.sortSelect.addEventListener('change', loadCards);
-el.colorSelect.addEventListener('change', loadCards);
-el.setSelect.addEventListener('change', loadCards);
-el.favoritesSortSelect.addEventListener('change', loadFavorites);
+el.alertsOnly.addEventListener('change', () => loadCards(1));
+el.sortSelect.addEventListener('change', () => loadCards(1));
+el.colorSelect.addEventListener('change', () => loadCards(1));
+el.setSelect.addEventListener('change', () => loadCards(1));
+el.favoritesSortSelect.addEventListener('change', () => loadFavorites(1));
 
 loadStatus();
-loadFacets().then(loadCards);
+loadFacets().then(() => loadCards(1));
 
 // Re-fetched every time the Favorites tab is opened (see nav.js), not just
 // once - a card can be favorited/unfavorited from the main Price Tracker
 // grid, so a one-time lazy load would go stale as soon as that happens.
-window.ensureFavoritesLoaded = loadFavorites;
+window.ensureFavoritesLoaded = () => loadFavorites(1);

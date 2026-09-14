@@ -13,7 +13,9 @@ router.get('/cards', (req, res) => {
   const sort = req.query.sort || 'pctChange';
   const color = req.query.color || '';
   const setCode = req.query.setCode || '';
-  res.json(priceService.getCards({ alertsOnly, favoritesOnly, sort, color, setCode }));
+  const page = Number(req.query.page) || 1;
+  const pageSize = req.query.pageSize ? Number(req.query.pageSize) : undefined;
+  res.json(priceService.getCards({ alertsOnly, favoritesOnly, sort, color, setCode, page, pageSize }));
 });
 
 router.put('/favorites/:productId', (req, res) => {
