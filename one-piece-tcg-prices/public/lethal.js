@@ -54,21 +54,46 @@
 // ("soft").
 //
 // NOT modeled yet (see the caveat text in index.html): true probability
-// from hidden information - specifically what a given un-Banished Trigger
-// would actually do. Likewise the "% of DON!! allocations are lethal"
-// figure is a coverage stat over the splits a player could choose, not a
-// real probability.
+// from hidden information - specifically what a generic un-Banished
+// Trigger would actually do. Likewise the "% of DON!! allocations are
+// lethal" figure is a coverage stat over the splits a player could choose,
+// not a real probability.
 //
-// Opponent color / DON!! available (prep, not yet wired up): the "Opponent
-// deck details" fields (Leader color, secondary color, DON!! available to
-// them) are read into the `defender` context object every calculation
-// builds, but nothing branches on them yet - the exact rules for how a
-// color or a defensive DON!! pool should change the math are still TBD.
-// `defender.color`, `defender.secondaryColor`, and `defender.donAvailable`
-// are the values to read once those rules are specified; the spots most
-// likely to need them are marked with TODO comments in resolveLine() (for
-// a power-boosting effect) and defenderCanSurvive() (for an alternate or
-// scaled defensive resource, same shape as the Counter budget).
+// Color-specific Counter Events: a Counter Event is a card played from
+// hand for an effect, instead of (or alongside) a printed Counter value -
+// each one below is a SEPARATE resource from the generic 1000/2000-value
+// cards already averaged into the budget above, with its own hand-card
+// (and sometimes DON!!) cost:
+//   - Universal (every color): 1 hand card + 1 DON!! for +4000 power.
+//     Bounded by however many such cards are assumed in the deck AND by
+//     DON!! actually available AND by having a hand card to spare.
+//   - Red only: 2 hand cards (the event, plus discarding another card) for
+//     +3000 power, no DON!! needed.
+//   - Yellow only: NOT a Counter Event - a specific Trigger variant. When
+//     one of these Life cards is dealt as damage, it's played instead of
+//     added to hand (so it doesn't feed the hand-growth mechanic above),
+//     and the defender may discard 1 hand card to add 1 card from the top
+//     of their deck to their Life area - i.e. heal 1 Life. Estimated as
+//     (current Life × assumed count ÷ deck size), since Life cards are
+//     just the top of the same shuffled deck, capped by hand size.
+// All of this is read in readDefenderContext(), which spends hand cards on
+// these Events first (before the generic average-value budget), and feeds
+// the result into defenderCanSurvive() as a bigger starting Counter budget
+// (events) and/or a higher Life threshold to clear (Yellow's heal). Hand
+// cards spent on Yellow's heal are capped by hand size but NOT jointly
+// optimized against the Events above - a deliberate simplification, since
+// exactly solving "Counter now vs. heal later" per battle would need a
+// much larger search; this tends to slightly OVERESTIMATE total defense,
+// which is the safer direction for a lethal calculator to be wrong in.
+//
+// Deliberately NOT modeled: Purple's Slow Slow Beam (2 DON!!, +2000
+// Counter, rests an enemy Character) - unlike every Counter Event above,
+// resting a Character can cancel a LATER attack in the line outright
+// rather than add defensive power to the current one, which doesn't fit
+// this model's "battles are fixed, only their Counter outcome is searched"
+// shape. Dual-color Leaders get both colors' Events, but no deeper
+// two-color interactions are modeled. Green, Blue, and Black currently
+// only get the universal Event until their decks are described.
 
 (function () {
   const MAX_DISTRIBUTIONS = 5000;
@@ -98,6 +123,10 @@
   const counter1000Input = document.getElementById('def-counter-1000-count');
   const deckSizeInput = document.getElementById('def-deck-size');
   const counterBudgetPreview = document.getElementById('counter-budget-preview');
+
+  const universalEventCountInput = document.getElementById('def-universal-event-count');
+  const redEventCountInput = document.getElementById('def-red-event-count');
+  const yellowHealCountInput = document.getElementById('def-yellow-heal-count');
 
   const calculateBtn = document.getElementById('calculate-lethal-btn');
   const resultEl = document.getElementById('lethal-result');
@@ -190,47 +219,87 @@
     return div.innerHTML;
   }
 
-  // Averages the opponent's deck composition into an assumed Counter value
-  // per card, then multiplies by hand size for a total budget this turn.
-  // budgetUnits rounds that total to the nearest 1000 (Counter cards only
-  // come in 1000/2000 increments, so the search below works in those units).
+  // Averages the opponent's generic deck composition into an assumed
+  // Counter value per card. This is the baseline 1000/2000-value-card
+  // estimate only - Counter Events (universal/Red/Yellow) are separate
+  // resources layered on top in readDefenderContext() below.
   function computeCounterBudget() {
     const handSize = Math.max(0, Math.floor(Number(handSizeInput.value)) || 0);
     const n2000 = Math.max(0, Number(counter2000Input.value)) || 0;
     const n1000 = Math.max(0, Number(counter1000Input.value)) || 0;
     const deckSize = Math.max(1, Number(deckSizeInput.value) || 1);
     const avgPerCard = (2000 * n2000 + 1000 * n1000) / deckSize;
-    const totalAssumed = avgPerCard * handSize;
-    const budgetUnits = Math.round(totalAssumed / 1000);
-    return { handSize, avgPerCard, totalAssumed, budgetUnits };
+    return { handSize, avgPerCard, deckSize };
   }
 
   function updateCounterBudgetPreview() {
-    const { handSize, avgPerCard, totalAssumed } = computeCounterBudget();
-    counterBudgetPreview.textContent =
-      `≈${Math.round(avgPerCard).toLocaleString()} Counter per card in hand → assumed Counter budget this turn: ` +
-      `~${Math.round(totalAssumed).toLocaleString()} across ${handSize} card${handSize === 1 ? '' : 's'}.`;
+    const defender = readDefenderContext();
+    const extras = [];
+    if (defender.universalUses) {
+      extras.push(`${defender.universalUses} DON!! Counter Event${defender.universalUses === 1 ? '' : 's'}`);
+    }
+    if (defender.redUses) {
+      extras.push(`${defender.redUses} 0-cost discard Event${defender.redUses === 1 ? '' : 's'}`);
+    }
+    const extrasText = extras.length ? `, plus ${extras.join(' and ')}` : '';
+    let text =
+      `≈${Math.round(defender.avgPerCard).toLocaleString()} Counter per card in hand → assumed Counter budget ` +
+      `this turn: ~${Math.round(defender.counterBudget).toLocaleString()} from ${defender.handSize} hand ` +
+      `card${defender.handSize === 1 ? '' : 's'}${extrasText}.`;
+    if (defender.healUses) {
+      text +=
+        ` Plus ~${defender.healUses} assumed heal${defender.healUses === 1 ? '' : 's'} this turn (Yellow), ` +
+        `raising their effective Life to ${defender.effectiveStartingLife}.`;
+    }
+    counterBudgetPreview.textContent = text;
   }
 
-  // Bundles every "what do we know/assume about the opponent" input into one
+  // Bundles every "what do we know/assume about the opponent" into one
   // object, so resolveLine() and defenderCanSurvive() have a single, stable
-  // place to read from. color/secondaryColor/donAvailable aren't used by
-  // either function yet (see the header comment) - they're captured here
-  // ahead of that so wiring them in later won't need new parameters
-  // threaded through every call site, just new logic inside those two
-  // functions.
+  // place to read from - including the color-specific Counter Events (see
+  // the header comment for the exact mechanics and the simplifications
+  // involved). Hand cards are spent on Events first (universal, then Red),
+  // and whatever's left funds the generic average-value Counter budget;
+  // Yellow's heal is capped by hand size but tracked independently of that
+  // spend - a documented, deliberately conservative simplification.
   function readDefenderContext() {
-    const { totalAssumed, budgetUnits, avgPerCard, handSize } = computeCounterBudget();
+    const { avgPerCard, handSize, deckSize } = computeCounterBudget();
+    const startingLife = Math.max(0, Number(defLifeInput.value) || 0);
+    const color = defLeaderColorInput.value;
+    const secondaryColor = defLeaderColor2Input.value || null;
+    const donAvailable = Math.max(0, Math.floor(Number(defDonAvailableInput.value)) || 0);
+    const universalEventCount = Math.max(0, Math.floor(Number(universalEventCountInput.value)) || 0);
+    const redEventCount = Math.max(0, Math.floor(Number(redEventCountInput.value)) || 0);
+    const yellowHealCount = Math.max(0, Math.floor(Number(yellowHealCountInput.value)) || 0);
+    const hasColor = (c) => color === c || secondaryColor === c;
+
+    const universalUses = Math.min(universalEventCount, donAvailable, handSize);
+    const handAfterUniversal = Math.max(0, handSize - universalUses);
+    const redUses = hasColor('red') ? Math.min(redEventCount, Math.floor(handAfterUniversal / 2)) : 0;
+    const eventPower = universalUses * 4000 + redUses * 3000;
+
+    const healUses = hasColor('yellow')
+      ? Math.min(handSize, Math.round((startingLife * yellowHealCount) / deckSize))
+      : 0;
+
+    const handForGenericCounter = Math.max(0, handSize - universalUses - redUses * 2);
+    const counterBudget = avgPerCard * handForGenericCounter + eventPower;
+    const counterBudgetUnits = Math.round(counterBudget / 1000);
+
     return {
       leaderPower: Number(defLeaderPowerInput.value) || 0,
-      startingLife: Math.max(0, Number(defLifeInput.value) || 0),
-      color: defLeaderColorInput.value,
-      secondaryColor: defLeaderColor2Input.value || null,
-      donAvailable: Math.max(0, Math.floor(Number(defDonAvailableInput.value)) || 0),
-      counterBudget: totalAssumed,
-      counterBudgetUnits: budgetUnits,
+      startingLife,
+      effectiveStartingLife: startingLife + healUses,
+      color,
+      secondaryColor,
+      donAvailable,
+      counterBudget,
+      counterBudgetUnits,
       avgPerCard,
       handSize,
+      universalUses,
+      redUses,
+      healUses,
     };
   }
 
@@ -299,9 +368,12 @@
           target = 'leader';
         } else {
           usedBlockerIds.add(blocker.id); // declaring block uses it up whether this battle is won or lost
-          // TODO(color/DON!! rules): a future opponent-color- or
-          // available-DON!!-based defensive boost would raise this
-          // Blocker's effective power, same spot as the Leader's below.
+          // Counter Events (universal/Red/Yellow) don't apply here: they're
+          // all spent during the Counter step of a Leader-direct battle in
+          // defenderCanSurvive() - Blocker battles never affect Life in
+          // this tool regardless of outcome, so Counter spent on one was
+          // never meaningful here to begin with (same reasoning as plain
+          // Counter above it).
           const defPower = blocker.power;
           if (effectivePower >= defPower) {
             log.push({
@@ -318,10 +390,10 @@
         }
       }
 
-      // TODO(color/DON!! rules): this is where an opponent-color- or
-      // available-DON!!-based defensive boost to the Leader's effective
-      // power would be added, once defender.color / defender.secondaryColor
-      // / defender.donAvailable have defined rules to apply.
+      // Color-specific Counter Events (universal/Red) add power here too,
+      // but as part of the shared Counter budget evaluated per-battle in
+      // defenderCanSurvive() rather than a static boost to defPower itself
+      // - see the header comment.
       const defPower = defender.leaderPower;
       if (effectivePower < defPower) {
         log.push({
@@ -373,16 +445,15 @@
   // instead of exponential, even though the decisions are now sequential
   // (budget earned from one battle can't be spent on an earlier one).
   //
-  // TODO(color/DON!! rules): defender.color, defender.secondaryColor, and
-  // defender.donAvailable are available here, unused so far. Once their
-  // rules are specified, they'd most likely either scale the starting
-  // budget (dp[0] below) or add a second, parallel resource the DP also
-  // tracks per state - the shape to follow is whatever Counter already
-  // does here.
+  // defender.counterBudget already includes color-specific Counter Event
+  // power (universal + Red) via readDefenderContext(), and
+  // defender.effectiveStartingLife already includes Yellow's assumed heal
+  // uses - this function doesn't need to know about color/DON!! directly,
+  // just these two pre-computed numbers.
   function defenderCanSurvive(leaderBattles, defender) {
-    const { startingLife, counterBudget, avgPerCard } = defender;
+    const { effectiveStartingLife, counterBudget, avgPerCard } = defender;
     const totalHits = leaderBattles.reduce((sum, b) => sum + b.hits, 0);
-    if (totalHits <= startingLife) return true; // not even lethal before Counter is considered
+    if (totalHits <= effectiveStartingLife) return true; // not even lethal before Counter is considered
 
     let dp = new Array(totalHits + 1).fill(-Infinity);
     dp[0] = counterBudget;
@@ -408,7 +479,7 @@
       dp = next;
     }
 
-    for (let h = 0; h <= Math.min(startingLife, totalHits); h += 1) {
+    for (let h = 0; h <= Math.min(effectiveStartingLife, totalHits); h += 1) {
       if (dp[h] !== -Infinity) return true;
     }
     return false;
@@ -449,14 +520,7 @@
       return { donAssignment, donUsed, lethal, finalLife, log, category };
     });
 
-    renderSearchResult({
-      attackers,
-      results,
-      totalDon,
-      truncated,
-      counterBudgetUnits: defender.counterBudgetUnits,
-      totalAssumedCounter: defender.counterBudget,
-    });
+    renderSearchResult({ attackers, results, totalDon, truncated, defender });
   }
 
   function renderLine(attackers, result, totalDon) {
@@ -472,7 +536,7 @@
     `;
   }
 
-  function renderSearchResult({ attackers, results, totalDon, truncated, counterBudgetUnits, totalAssumedCounter }) {
+  function renderSearchResult({ attackers, results, totalDon, truncated, defender }) {
     resultEl.hidden = false;
 
     const exploredCount = results.length;
@@ -484,7 +548,14 @@
     resultEl.classList.remove('lethal-result-yes', 'lethal-result-caution', 'lethal-result-no');
     resultEl.classList.add(robust.length ? 'lethal-result-yes' : soft.length ? 'lethal-result-caution' : 'lethal-result-no');
 
-    const budgetNote = `<p class="lethal-hint">Assuming the opponent has ~${Math.round(totalAssumedCounter).toLocaleString()} Counter available this turn (~${counterBudgetUnits.toLocaleString()}k, from their hand size and deck composition).</p>`;
+    const eventParts = [];
+    if (defender.universalUses) eventParts.push(`${defender.universalUses} DON!! Counter Event${defender.universalUses === 1 ? '' : 's'}`);
+    if (defender.redUses) eventParts.push(`${defender.redUses} 0-cost discard Event${defender.redUses === 1 ? '' : 's'}`);
+    const eventsText = eventParts.length ? `, plus ${eventParts.join(' and ')}` : '';
+    const healText = defender.healUses
+      ? ` and ~${defender.healUses} assumed heal${defender.healUses === 1 ? '' : 's'} (raising their effective Life to ${defender.effectiveStartingLife})`
+      : '';
+    const budgetNote = `<p class="lethal-hint">Assuming the opponent has ~${Math.round(defender.counterBudget).toLocaleString()} Counter available this turn (~${defender.counterBudgetUnits.toLocaleString()}k, from their hand size and deck composition${eventsText})${healText}.</p>`;
     const truncNote = truncated
       ? `<p class="lethal-hint">Search capped at ${exploredCount.toLocaleString()} DON!! allocations explored (your pool/attacker count allows more) - showing the best results found within that limit.</p>`
       : '';
@@ -550,8 +621,19 @@
   addBlockerBtn.addEventListener('click', addBlockerRow);
   addAttackerBtn.addEventListener('click', addAttackerRow);
   calculateBtn.addEventListener('click', calculate);
-  [handSizeInput, counter2000Input, counter1000Input, deckSizeInput].forEach((el) =>
-    el.addEventListener('input', updateCounterBudgetPreview),
+  [
+    handSizeInput,
+    counter2000Input,
+    counter1000Input,
+    deckSizeInput,
+    defLifeInput,
+    defDonAvailableInput,
+    universalEventCountInput,
+    redEventCountInput,
+    yellowHealCountInput,
+  ].forEach((el) => el.addEventListener('input', updateCounterBudgetPreview));
+  [defLeaderColorInput, defLeaderColor2Input].forEach((el) =>
+    el.addEventListener('change', updateCounterBudgetPreview),
   );
 
   initLeaderRow();

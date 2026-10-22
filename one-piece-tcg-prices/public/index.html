@@ -165,17 +165,20 @@
 
           <h3>Opponent deck details</h3>
           <p class="lethal-hint">
-            Captured for an upcoming refinement to the Assumed Counter math below - color- and DON!!-aware
-            assumptions aren't wired in yet, so these two fields don't change results yet.
+            Color and DON!! available now feed into the Assumed Counter math below for Red, Yellow, and Purple -
+            see that section for the specific fields each one unlocks. Other colors currently only get the
+            DON!!-based Counter Event that's available to every color. Dual-color Leaders get both of their
+            colors' mechanics, but deeper two-color interactions aren't modeled yet, and Purple's Slow Slow Beam is
+            deliberately left out (see the caveat at the bottom for why).
           </p>
           <div class="lethal-field-row">
             <label for="def-leader-color">Leader color</label>
             <select id="def-leader-color">
-              <option value="red">Red</option>
               <option value="green">Green</option>
               <option value="blue">Blue</option>
-              <option value="purple">Purple</option>
               <option value="black">Black</option>
+              <option value="purple">Purple</option>
+              <option value="red">Red</option>
               <option value="yellow">Yellow</option>
             </select>
           </div>
@@ -221,6 +224,39 @@
             <label for="def-deck-size">Deck size</label>
             <input type="number" id="def-deck-size" min="1" step="1" value="50" />
           </div>
+
+          <h3>Counter Events</h3>
+          <p class="lethal-hint">
+            A Counter Event is a card played from hand for a special effect instead of a printed Counter value -
+            counted separately from the generic 1000/2000 cards above. Each one below needs its own hand card, on
+            top of whatever's used for generic Counter.
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-universal-event-count">1-DON!! Counter Events in their deck (+4000, any color)</label>
+            <input type="number" id="def-universal-event-count" min="0" step="1" value="3" />
+          </div>
+          <p class="lethal-hint">
+            Costs 1 hand card + 1 DON!! for +4000 power. Available to every color - most decks run 2-4 copies,
+            Purple decks typically run more, around 4-6.
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-red-event-count">0-cost discard Events in their deck (+3000, Red only)</label>
+            <input type="number" id="def-red-event-count" min="0" step="1" value="3" />
+          </div>
+          <p class="lethal-hint">
+            Costs 2 hand cards (the event itself, plus discarding another card) for +3000 power, no DON!! needed.
+            Has no effect unless Leader color (primary or secondary) is Red. Red decks typically run 2-4 copies.
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-yellow-heal-count">Heal-on-Trigger cards in their deck (Yellow only)</label>
+            <input type="number" id="def-yellow-heal-count" min="0" step="1" value="6" />
+          </div>
+          <p class="lethal-hint">
+            When one of these is dealt as damage, it's played instead of added to hand, and costs 1 hand card to
+            discard for +1 Life from the top of their deck. Has no effect unless Leader color (primary or
+            secondary) is Yellow. Yellow decks typically run 4-8 copies - the calculator estimates how many show up
+            in the current Life total from this count and your deck size above.
+          </p>
           <p class="lethal-hint" id="counter-budget-preview"></p>
 
           <h3>Active Blockers</h3>
@@ -273,11 +309,21 @@
         attack - not a fresh value per battle - and it grows mid-turn as non-Banished Life cards reach hand from
         earlier hits in the same sequence). Results are split into lines that are lethal even against that full
         assumed budget versus lines that only connect if the opponent is short on Counter, so you can see how risky
-        each plan actually is. Triggers still aren't modeled - what an un-Banished Life card does if revealed
-        needs rules only you can supply. Likewise, the "N% of DON!! allocations are lethal" figure next to your
-        results isn't a real probability either - you're choosing how to split your DON!!, not drawing it at
-        random - it's a coverage stat showing how many of the ways you could spend your pool actually win, with the
-        cheapest winning split called out for you to play.
+        each plan actually is. Generic Trigger effects still aren't modeled - what an un-Banished Life card does if
+        revealed needs rules only you can supply (Yellow's heal-on-Trigger cards are the one specific case that's
+        covered, since it was described precisely enough to estimate). Likewise, the "N% of DON!! allocations are
+        lethal" figure next to your results isn't a real probability either - you're choosing how to split your
+        DON!!, not drawing it at random - it's a coverage stat showing how many of the ways you could spend your
+        pool actually win, with the cheapest winning split called out for you to play.
+      </p>
+      <p class="lethal-caveat">
+        <strong>What's deliberately left out of the Counter Events above:</strong> Purple's Slow Slow Beam (2 DON!!,
+        +2000 Counter, and rests an enemy Character) isn't modeled - unlike every other Counter effect here, resting
+        a Character can cancel a LATER attack in your line outright rather than just adding defensive power to one
+        battle, which would need the attack-resolution loop itself to support a battle being called off mid-sequence
+        rather than just negated. Dual-color Leaders get both of their colors' Counter Events, but no deeper
+        two-color interactions are modeled yet, and Green, Blue, and Black currently only get the universal
+        DON!!-based Counter Event until their specific decks are described.
       </p>
     </section>
   </main>

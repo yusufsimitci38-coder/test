@@ -386,20 +386,59 @@ choose how to split your DON!!, you don't draw it at random - it's a
 coverage stat over the splits you could choose from, with the cheapest
 winning one surfaced so you don't have to dig for it.
 
-**Prepared, not yet wired up:** an "Opponent deck details" section captures
-the opponent Leader's color (plus an optional secondary color, for the many
-dual-color Leaders) and how much DON!! is available to them, ahead of a
-planned refinement to the Assumed Counter math that will use them - the
-rules for exactly how a color or a defensive DON!! pool should change the
-calculation haven't been decided yet, so for now these two fields are
-captured but inert. `public/lethal.js` bundles every opponent-side input
-(Leader power, Life, color, DON!! available, Counter budget) into one
-`defender` context object read by `resolveLine()` and `defenderCanSurvive()`,
-with `TODO` comments at the specific spots - the Leader/Blocker power
-comparisons in the former, the Counter-budget DP's starting value in the
-latter - most likely to need new logic once those rules are supplied, so
-that wiring them in won't require threading new parameters through every
-call site.
+**Color-specific Counter Events:** the opponent's Leader color (plus an
+optional secondary color, for dual-color Leaders) and how much DON!! is
+available to them now feed into the Assumed Counter math for Red, Yellow,
+and Purple, each described by the user and implemented as follows. A
+Counter Event is a card played from hand for a specific effect instead of
+a printed Counter value, and is a SEPARATE resource from the generic
+1000/2000-value cards already averaged into the budget:
+
+- **Universal (every color):** a 1-DON!!-cost Counter Event worth +4000
+  power - 1 hand card plus 1 DON!!, bounded by however many such cards are
+  assumed in the deck (default 3, typically 2-4) AND by DON!! actually
+  available AND by having a hand card to spare. Purple decks typically run
+  more of these (4-6) - there's no auto-adjustment for that, just a hint
+  reminding you to bump the count if the opponent is Purple.
+- **Red only:** a 0-DON!!-cost Counter Event worth +3000 power, at the cost
+  of 2 hand cards (the event itself, plus discarding another card). Default
+  count 3 (typically 2-4). Has no effect unless Leader color (primary or
+  secondary) is Red.
+- **Yellow only:** not a Counter Event at all - a specific Trigger variant.
+  When one of these Life cards is dealt as damage, it's played instead of
+  added to hand (so it doesn't feed the mid-turn hand-growth mechanic
+  above), and the defender may discard 1 hand card to add 1 card from the
+  top of their deck to their Life area - i.e. heal 1 Life. Estimated as
+  (current Life × assumed count ÷ deck size), since Life cards are just the
+  top of the same shuffled 50-card deck as everything else; default count 6
+  (typically 4-8). Has no effect unless Leader color is Yellow.
+
+All three compete for the SAME hand-card pool as generic Counter: hand
+cards are spent on Events first (universal, then Red), and whatever's left
+funds the generic average-value budget; Yellow's heal is capped by hand
+size but NOT jointly optimized against the Events above - a deliberate
+simplification, since exactly solving "spend this card on Counter now, or
+save it to heal later" per battle would need a much larger search. This
+tends to slightly overestimate total defense, which is the safer direction
+for a lethal calculator to be wrong in.
+
+**Deliberately left out:** Purple's Slow Slow Beam (2 DON!!, +2000 Counter,
+and rests an enemy Character) isn't modeled. Unlike every other Counter
+Event here, resting a Character can cancel a LATER attack in the line
+outright rather than add defensive power to the current one - that doesn't
+fit this calculator's "battles are fixed, only their Counter outcome is
+searched" shape, and the user explicitly said to skip it rather than risk
+getting it wrong. Dual-color Leaders get both of their colors' Events, but
+no deeper two-color interactions are modeled yet, and Green, Blue, and
+Black currently only get the universal Event until their specific decks
+are described.
+
+`public/lethal.js` bundles every opponent-side input (Leader power, Life,
+color, DON!! available, Counter budget, Event counts) into one `defender`
+context object via `readDefenderContext()`, read by `resolveLine()` and
+`defenderCanSurvive()` - the latter is where all the Event/heal math above
+actually lives, via `defender.counterBudget` (includes Event power) and
+`defender.effectiveStartingLife` (includes Yellow's heal).
 
 ## Architecture
 
