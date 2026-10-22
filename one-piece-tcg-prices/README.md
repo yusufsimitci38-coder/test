@@ -386,6 +386,21 @@ choose how to split your DON!!, you don't draw it at random - it's a
 coverage stat over the splits you could choose from, with the cheapest
 winning one surfaced so you don't have to dig for it.
 
+**Prepared, not yet wired up:** an "Opponent deck details" section captures
+the opponent Leader's color (plus an optional secondary color, for the many
+dual-color Leaders) and how much DON!! is available to them, ahead of a
+planned refinement to the Assumed Counter math that will use them - the
+rules for exactly how a color or a defensive DON!! pool should change the
+calculation haven't been decided yet, so for now these two fields are
+captured but inert. `public/lethal.js` bundles every opponent-side input
+(Leader power, Life, color, DON!! available, Counter budget) into one
+`defender` context object read by `resolveLine()` and `defenderCanSurvive()`,
+with `TODO` comments at the specific spots - the Leader/Blocker power
+comparisons in the former, the Counter-budget DP's starting value in the
+latter - most likely to need new logic once those rules are supplied, so
+that wiring them in won't require threading new parameters through every
+call site.
+
 ## Architecture
 
 ```

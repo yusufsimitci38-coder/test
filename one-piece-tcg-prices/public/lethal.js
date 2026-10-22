@@ -58,6 +58,17 @@
 // would actually do. Likewise the "% of DON!! allocations are lethal"
 // figure is a coverage stat over the splits a player could choose, not a
 // real probability.
+//
+// Opponent color / DON!! available (prep, not yet wired up): the "Opponent
+// deck details" fields (Leader color, secondary color, DON!! available to
+// them) are read into the `defender` context object every calculation
+// builds, but nothing branches on them yet - the exact rules for how a
+// color or a defensive DON!! pool should change the math are still TBD.
+// `defender.color`, `defender.secondaryColor`, and `defender.donAvailable`
+// are the values to read once those rules are specified; the spots most
+// likely to need them are marked with TODO comments in resolveLine() (for
+// a power-boosting effect) and defenderCanSurvive() (for an alternate or
+// scaled defensive resource, same shape as the Counter budget).
 
 (function () {
   const MAX_DISTRIBUTIONS = 5000;
@@ -77,6 +88,10 @@
   const defLeaderPowerInput = document.getElementById('def-leader-power');
   const defLifeInput = document.getElementById('def-life');
   const donPoolInput = document.getElementById('atk-don-pool');
+
+  const defLeaderColorInput = document.getElementById('def-leader-color');
+  const defLeaderColor2Input = document.getElementById('def-leader-color-2');
+  const defDonAvailableInput = document.getElementById('def-don-available');
 
   const handSizeInput = document.getElementById('def-hand-size');
   const counter2000Input = document.getElementById('def-counter-2000-count');
@@ -197,6 +212,28 @@
       `~${Math.round(totalAssumed).toLocaleString()} across ${handSize} card${handSize === 1 ? '' : 's'}.`;
   }
 
+  // Bundles every "what do we know/assume about the opponent" input into one
+  // object, so resolveLine() and defenderCanSurvive() have a single, stable
+  // place to read from. color/secondaryColor/donAvailable aren't used by
+  // either function yet (see the header comment) - they're captured here
+  // ahead of that so wiring them in later won't need new parameters
+  // threaded through every call site, just new logic inside those two
+  // functions.
+  function readDefenderContext() {
+    const { totalAssumed, budgetUnits, avgPerCard, handSize } = computeCounterBudget();
+    return {
+      leaderPower: Number(defLeaderPowerInput.value) || 0,
+      startingLife: Math.max(0, Number(defLifeInput.value) || 0),
+      color: defLeaderColorInput.value,
+      secondaryColor: defLeaderColor2Input.value || null,
+      donAvailable: Math.max(0, Math.floor(Number(defDonAvailableInput.value)) || 0),
+      counterBudget: totalAssumed,
+      counterBudgetUnits: budgetUnits,
+      avgPerCard,
+      handSize,
+    };
+  }
+
   // Enumerates every way to assign non-negative integer DON!! amounts to
   // `caps.length` attackers such that each amount is <= that attacker's cap
   // and the total used is <= `total` (unused DON!! is implicitly allowed -
@@ -235,12 +272,12 @@
   // negate each one) for the Counter-feasibility search below. Processes
   // every attacker (doesn't stop at the first lethal hit) so that search has
   // the full picture of what's negatable.
-  function resolveLine(attackers, donAssignment, blockers, defenderLeaderPower, startingLife) {
+  function resolveLine(attackers, donAssignment, blockers, defender) {
     const blockersById = new Map(blockers.map((b) => [b.id, b]));
     const usedBlockerIds = new Set();
     const log = [];
     const leaderBattles = [];
-    let life = startingLife;
+    let life = defender.startingLife;
     let lethal = false;
 
     for (let i = 0; i < attackers.length; i += 1) {
@@ -262,6 +299,9 @@
           target = 'leader';
         } else {
           usedBlockerIds.add(blocker.id); // declaring block uses it up whether this battle is won or lost
+          // TODO(color/DON!! rules): a future opponent-color- or
+          // available-DON!!-based defensive boost would raise this
+          // Blocker's effective power, same spot as the Leader's below.
           const defPower = blocker.power;
           if (effectivePower >= defPower) {
             log.push({
@@ -278,7 +318,11 @@
         }
       }
 
-      const defPower = defenderLeaderPower;
+      // TODO(color/DON!! rules): this is where an opponent-color- or
+      // available-DON!!-based defensive boost to the Leader's effective
+      // power would be added, once defender.color / defender.secondaryColor
+      // / defender.donAvailable have defined rules to apply.
+      const defPower = defender.leaderPower;
       if (effectivePower < defPower) {
         log.push({
           type: 'fail',
@@ -328,12 +372,20 @@
   // be kept - this keeps the search polynomial (battles × total hits)
   // instead of exponential, even though the decisions are now sequential
   // (budget earned from one battle can't be spent on an earlier one).
-  function defenderCanSurvive(leaderBattles, startingLife, initialBudget, avgPerCard) {
+  //
+  // TODO(color/DON!! rules): defender.color, defender.secondaryColor, and
+  // defender.donAvailable are available here, unused so far. Once their
+  // rules are specified, they'd most likely either scale the starting
+  // budget (dp[0] below) or add a second, parallel resource the DP also
+  // tracks per state - the shape to follow is whatever Counter already
+  // does here.
+  function defenderCanSurvive(leaderBattles, defender) {
+    const { startingLife, counterBudget, avgPerCard } = defender;
     const totalHits = leaderBattles.reduce((sum, b) => sum + b.hits, 0);
     if (totalHits <= startingLife) return true; // not even lethal before Counter is considered
 
     let dp = new Array(totalHits + 1).fill(-Infinity);
-    dp[0] = initialBudget;
+    dp[0] = counterBudget;
 
     for (const battle of leaderBattles) {
       const next = new Array(totalHits + 1).fill(-Infinity);
@@ -363,11 +415,9 @@
   }
 
   function calculate() {
-    const defenderLeaderPower = Number(defLeaderPowerInput.value) || 0;
-    const startingLife = Math.max(0, Number(defLifeInput.value) || 0);
+    const defender = readDefenderContext();
     const totalDon = Math.max(0, Math.floor(Number(donPoolInput.value)) || 0);
     const blockers = currentBlockers();
-    const { totalAssumed, budgetUnits, avgPerCard } = computeCounterBudget();
 
     const attackers = [
       readAttackerRow(leaderRowContainer.querySelector('.lethal-attacker-row'), true),
@@ -387,18 +437,12 @@
     const { distributions, truncated } = enumerateDonDistributions(caps, totalDon, MAX_DISTRIBUTIONS);
 
     const results = distributions.map((donAssignment) => {
-      const { log, lethal, finalLife, leaderBattles } = resolveLine(
-        attackers,
-        donAssignment,
-        blockers,
-        defenderLeaderPower,
-        startingLife,
-      );
+      const { log, lethal, finalLife, leaderBattles } = resolveLine(attackers, donAssignment, blockers, defender);
       const donUsed = donAssignment.reduce((sum, x) => sum + x, 0);
 
       let category = 'not-lethal';
       if (lethal) {
-        const survives = defenderCanSurvive(leaderBattles, startingLife, totalAssumed, avgPerCard);
+        const survives = defenderCanSurvive(leaderBattles, defender);
         category = survives ? 'soft-lethal' : 'robust-lethal';
       }
 
@@ -410,8 +454,8 @@
       results,
       totalDon,
       truncated,
-      counterBudgetUnits: budgetUnits,
-      totalAssumedCounter: totalAssumed,
+      counterBudgetUnits: defender.counterBudgetUnits,
+      totalAssumedCounter: defender.counterBudget,
     });
   }
 

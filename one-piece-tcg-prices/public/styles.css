@@ -507,7 +507,8 @@ main {
   font-size: 0.9rem;
 }
 
-.lethal-field-row input {
+.lethal-field-row input,
+.lethal-field-row select {
   background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border);
@@ -515,6 +516,8 @@ main {
   padding: 0.3rem 0.5rem;
   width: 7rem;
 }
+
+.lethal-field-row select { width: auto; min-width: 9rem; }
 
 .lethal-dynamic-list { display: flex; flex-direction: column; gap: 0.5rem; }
 

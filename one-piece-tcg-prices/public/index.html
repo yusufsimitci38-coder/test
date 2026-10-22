@@ -163,6 +163,39 @@
             <input type="number" id="def-life" min="0" max="10" value="4" />
           </div>
 
+          <h3>Opponent deck details</h3>
+          <p class="lethal-hint">
+            Captured for an upcoming refinement to the Assumed Counter math below - color- and DON!!-aware
+            assumptions aren't wired in yet, so these two fields don't change results yet.
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-leader-color">Leader color</label>
+            <select id="def-leader-color">
+              <option value="red">Red</option>
+              <option value="green">Green</option>
+              <option value="blue">Blue</option>
+              <option value="purple">Purple</option>
+              <option value="black">Black</option>
+              <option value="yellow">Yellow</option>
+            </select>
+          </div>
+          <div class="lethal-field-row">
+            <label for="def-leader-color-2">Secondary color (optional)</label>
+            <select id="def-leader-color-2">
+              <option value="">None</option>
+              <option value="red">Red</option>
+              <option value="green">Green</option>
+              <option value="blue">Blue</option>
+              <option value="purple">Purple</option>
+              <option value="black">Black</option>
+              <option value="yellow">Yellow</option>
+            </select>
+          </div>
+          <div class="lethal-field-row">
+            <label for="def-don-available">DON!! available to them</label>
+            <input type="number" id="def-don-available" min="0" step="1" value="0" />
+          </div>
+
           <h3>Assumed Counter</h3>
           <p class="lethal-hint">
             Only modeled for attacks aimed directly at the Leader - Counter spent saving a Blocker never changes
