@@ -344,20 +344,37 @@ called out as missing from existing public lethal calculators (Double
 Attack, Banish), plus the other keyword interactions (Blocker, DON!!, K.O.)
 needed for the math to be meaningful at all.
 
+**Assumed Counter budget:** instead of typing a guessed Counter value per
+attack, enter the opponent's hand size plus how many 1000- and 2000-power
+Counter cards their deck runs (defaults: 14 and 11, out of a 50-card deck -
+the typical range is 12-16 and 10-12). The calculator averages that deck
+composition into an assumed Counter value per card, multiplies by hand size,
+and rounds to the nearest 1000 to get a total Counter budget for the turn -
+e.g. the defaults give ≈780/card, so a 5-card hand assumes ≈3,900 available.
+Counter is only modeled for attacks aimed directly at the Leader, since
+defending a Blocker never costs or saves Life in this tool either way. A
+Counter card is discarded once played, so - exactly like DON!! - that budget
+is one shared pool spent down across every Leader hit this turn, not a
+fresh value per battle: for each DON!! split in the search, the calculator
+finds the *cheapest* way the opponent could spend their budget to survive
+(a small 0/1 knapsack over that line's Leader-targeted hits, since Counter
+on a given battle is all-or-nothing - either it fully negates that attack or
+it's wasted). Results are split into two tiers: **robustly lethal** lines
+that connect even against the opponent's *full* assumed budget, and lines
+that are **lethal only if they're short on Counter** - connecting now, but
+survivable within their assumed budget - so you can see not just whether a
+line kills, but how much it's betting on the opponent being light on
+Counter this turn.
+
 **What this deliberately doesn't do yet:** compute a true win *probability*.
-That needs modeling hidden information - whether the defender's hand
-actually holds enough Counter power to survive a contested battle, and
-what an un-Banished Life card's Trigger would actually do - and both need
-rules/preferences only a user can supply (how to estimate remaining-deck
-Counter odds, which Trigger effects to model vs. ignore). For now, each
-attacking row has an "Assumed opponent Counter here" field - a manual
-stand-in for that: set it to stress-test a specific "what if they have it"
-scenario yourself, rather than this page guessing at a percentage. The "N%
-of DON!! allocations are lethal" figure next to search results is the same
-kind of stand-in, not a real probability either - you choose how to split
-your DON!!, you don't draw it at random - it's a coverage stat over the
-splits you could choose from, with the cheapest winning one surfaced so you
-don't have to dig for it.
+That still needs modeling hidden information - specifically what an
+un-Banished Life card's Trigger would actually do, which needs
+rules/preferences only a user can supply (which Trigger effects to model
+vs. ignore). The "N% of DON!! allocations are lethal" figure next to search
+results is a related kind of stand-in, not a real probability either - you
+choose how to split your DON!!, you don't draw it at random - it's a
+coverage stat over the splits you could choose from, with the cheapest
+winning one surfaced so you don't have to dig for it.
 
 ## Architecture
 

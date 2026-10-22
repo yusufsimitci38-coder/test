@@ -8,6 +8,7 @@
   --accent: #e3432a;
   --up: #33c17a;
   --down: #ef5555;
+  --warn: #e0a930;
   --border: #2c3157;
 }
 
@@ -595,6 +596,8 @@ main {
 
 .lethal-result-yes { border-color: var(--up); box-shadow: 0 0 0 1px var(--up); }
 .lethal-result-yes h2 { color: var(--up); }
+.lethal-result-caution { border-color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+.lethal-result-caution h2 { color: var(--warn); }
 .lethal-result-no { border-color: var(--down); box-shadow: 0 0 0 1px var(--down); }
 .lethal-result-no h2 { color: var(--down); }
 

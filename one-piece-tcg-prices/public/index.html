@@ -145,8 +145,10 @@
         <strong>Banish</strong> (the Life card is trashed unseen - no Trigger at all), <strong>Blocker</strong>,
         <strong>DON!!</strong>, and K.O. comparisons (ties go to the attacker). Set how many DON!! you have
         available this turn and it searches every way to split them across your attackers, surfacing which splits
-        are lethal instead of making you test one allocation at a time. This is a deterministic calculator, not a
-        true probability engine yet - see the note at the bottom for why, and what's needed to get there.
+        are lethal instead of making you test one allocation at a time - and instead of guessing a Counter value
+        per attack, it estimates the opponent's total Counter budget from their hand size and deck composition.
+        This is a deterministic calculator, not a true probability engine yet - see the note at the bottom for why,
+        and what's needed to get there.
       </p>
 
       <div class="lethal-layout">
@@ -160,6 +162,30 @@
             <label for="def-life">Current Life</label>
             <input type="number" id="def-life" min="0" max="10" value="4" />
           </div>
+
+          <h3>Assumed Counter</h3>
+          <p class="lethal-hint">
+            Only modeled for attacks aimed directly at the Leader - Counter spent saving a Blocker never changes
+            whether the turn is lethal, so it isn't tracked here. Counter cards are discarded once played, so this
+            budget is shared and spent down across every attack this turn, the same way DON!! is.
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-hand-size">Opponent hand size</label>
+            <input type="number" id="def-hand-size" min="0" step="1" value="5" />
+          </div>
+          <div class="lethal-field-row">
+            <label for="def-counter-2000-count">2000-power Counter cards in their deck</label>
+            <input type="number" id="def-counter-2000-count" min="0" step="1" value="14" />
+          </div>
+          <div class="lethal-field-row">
+            <label for="def-counter-1000-count">1000-power Counter cards in their deck</label>
+            <input type="number" id="def-counter-1000-count" min="0" step="1" value="11" />
+          </div>
+          <div class="lethal-field-row">
+            <label for="def-deck-size">Deck size</label>
+            <input type="number" id="def-deck-size" min="1" step="1" value="50" />
+          </div>
+          <p class="lethal-hint" id="counter-budget-preview"></p>
 
           <h3>Active Blockers</h3>
           <p class="lethal-hint">Only Characters that are active (not rested) can block, and each can block at most once per turn.</p>
@@ -204,14 +230,17 @@
 
       <p class="lethal-caveat">
         <strong>Why this isn't a real probability yet:</strong> a true P(lethal) needs to account for hidden
-        information - whether the defender's hand actually holds enough Counter power to survive a contested
-        battle, and whether an un-Banished Life card's Trigger does something that changes the outcome. Both need
-        rules/preferences only you can supply (e.g. how you want remaining-deck Counter odds estimated, which
-        Trigger effects should be modeled vs ignored) - this calculator is deterministic for now: enter an assumed
-        Counter value per attack to stress-test a "what if they have it" scenario yourself. Likewise, the "N% of
-        DON!! allocations are lethal" figure next to your results isn't a real probability either - you're choosing
-        how to split your DON!!, not drawing it at random - it's a coverage stat showing how many of the ways you
-        could spend your pool actually win, with the cheapest winning split called out for you to play.
+        information - the defender's actual hand, and what an un-Banished Life card's Trigger would do. Counter is
+        now estimated instead of guessed: enter the opponent's hand size plus how many 1000- and 2000-power Counter
+        cards their deck runs, and the calculator averages that into an assumed total Counter budget for the turn
+        (Counter cards are discarded once played, so like DON!!, it's one shared pool spent down across every
+        attack - not a fresh value per battle). Results are split into lines that are lethal even against that
+        full assumed budget versus lines that only connect if the opponent is short on Counter, so you can see how
+        risky each plan actually is. Triggers still aren't modeled - what an un-Banished Life card does if revealed
+        needs rules only you can supply. Likewise, the "N% of DON!! allocations are lethal" figure next to your
+        results isn't a real probability either - you're choosing how to split your DON!!, not drawing it at
+        random - it's a coverage stat showing how many of the ways you could spend your pool actually win, with the
+        cheapest winning split called out for you to play.
       </p>
     </section>
   </main>
@@ -236,7 +265,6 @@
           <option value="leader">Opponent Leader (direct)</option>
         </select>
       </label>
-      <label>Assumed opponent Counter here <input type="number" class="lethal-atk-counter" min="0" step="1000" value="0" /></label>
     </div>
   </template>
 
@@ -252,7 +280,6 @@
           <option value="leader">Opponent Leader (direct)</option>
         </select>
       </label>
-      <label>Assumed opponent Counter here <input type="number" class="lethal-atk-counter" min="0" step="1000" value="0" /></label>
       <div class="lethal-row-actions">
         <button type="button" class="lethal-move-up" aria-label="Move up">↑</button>
         <button type="button" class="lethal-move-down" aria-label="Move down">↓</button>
