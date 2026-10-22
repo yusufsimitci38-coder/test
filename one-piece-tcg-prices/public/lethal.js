@@ -92,8 +92,15 @@
 // rather than add defensive power to the current one, which doesn't fit
 // this model's "battles are fixed, only their Counter outcome is searched"
 // shape. Dual-color Leaders get both colors' Events, but no deeper
-// two-color interactions are modeled. Green, Blue, and Black currently
-// only get the universal Event until their decks are described.
+// two-color interactions are modeled.
+//
+// Blue and Black have no color-specific mechanic to model: Blue's larger
+// boards and heavier Blocker count are already captured by however many
+// rows the user adds to Active Blockers, not something this calculator
+// needs to assume on its own. Green is the same for now - a Leader
+// releasing in about a month is expected to let certain cards count as
+// 3000 Counter, but it isn't in the game yet, so there's nothing to add
+// until it releases.
 
 (function () {
   const MAX_DISTRIBUTIONS = 5000;

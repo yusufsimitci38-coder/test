@@ -429,9 +429,15 @@ outright rather than add defensive power to the current one - that doesn't
 fit this calculator's "battles are fixed, only their Counter outcome is
 searched" shape, and the user explicitly said to skip it rather than risk
 getting it wrong. Dual-color Leaders get both of their colors' Events, but
-no deeper two-color interactions are modeled yet, and Green, Blue, and
-Black currently only get the universal Event until their specific decks
-are described.
+no deeper two-color interactions are modeled yet.
+
+**Blue and Black have no color-specific mechanic to model**, confirmed by
+the user - Blue's larger boards and heavier Blocker count are already
+captured by however many rows the user adds under Active Blockers, not
+something this calculator needs to assume on its own. **Green is the same
+for now** - a Leader releasing in about a month is expected to let certain
+cards count as 3000 Counter, but it isn't in the game yet, so there's
+nothing to add until it releases.
 
 `public/lethal.js` bundles every opponent-side input (Leader power, Life,
 color, DON!! available, Counter budget, Event counts) into one `defender`
