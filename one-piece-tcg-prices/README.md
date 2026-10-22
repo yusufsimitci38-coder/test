@@ -1,6 +1,6 @@
 # One Piece TCG Toolkit
 
-Two modules sharing one server and dashboard (see [Architecture](#architecture)):
+Three modules sharing one server and dashboard (see [Architecture](#architecture)):
 
 - **Price Tracker** — tracks TCGPlayer market prices for One Piece Card
   Game singles and flags cards that have moved a lot recently: **price ≥ $4
@@ -8,6 +8,9 @@ Two modules sharing one server and dashboard (see [Architecture](#architecture))
   configurable).
 - **Event Tracker** — a calendar of One Piece TCG tournaments (Regionals,
   Treasure Cups, online events) pulled from Limitless TCG's public data.
+- **Lethal Calculator** — plans out one turn's attacks and tells you whether
+  it's lethal, accounting for Double Attack, Banish, Blocker, and DON!! -
+  see [Lethal Calculator](#lethal-calculator) below.
 
 ## Why this doesn't scrape tcgplayer.com directly
 
@@ -287,6 +290,57 @@ page, but with table row/cell boundaries (`@@ROW@@`/`@@CELL@@`) and link
 targets (`@@LINK:href@@`) marked inline - for figuring out the real page
 structure when the plain-text extraction alone isn't enough to tell.
 
+## Lethal Calculator
+
+Entirely client-side (`public/lethal.js`) - no server route, nothing
+persisted. Unlike the other two modules, there's no external data source or
+history to track: it's a pure "plan this turn's attacks, right now" tool,
+so it just runs in the browser against whatever you type in.
+
+Enter the opponent's Leader power, current Life, and any active Blockers;
+your Leader and each Character that can actually attack this turn (power,
+DON!! attached, Double Attack, Banish), and which target each attacker goes
+after (the Leader directly, or a specific Blocker). Attacks resolve top to
+bottom - a Blocker already used earlier in the list can't block again, and
+the calculator flags that and sends the attack at the Leader instead rather
+than silently miscounting. Reorder attacking Characters with the ↑/↓
+buttons on each row; the Leader always resolves first.
+
+The combat math is grounded in the official Comprehensive Rules (confirmed
+via a mix of the rules PDF and corroborating community guides - this
+sandbox can't fetch `en.onepiece-cardgame.com` directly, same as everywhere
+else in this project that cites it):
+
+- **Battle:** attacker power ≥ defender power wins (ties go to the
+  attacker); losing a battle never penalizes the attacker itself.
+- **Blocker:** redirects one attack fully away from the Leader; can only
+  block once per turn.
+- **DON!!:** each attached DON!! is +1000 power, for the turn only.
+- **Double Attack:** *not* "2x power" - it deals damage as two separate
+  Life-card hits, each its own reveal/Trigger opportunity. The log shows
+  both hits individually for exactly this reason.
+- **Banish:** the Life card removed goes straight to the trash, unseen - no
+  Trigger, ever, for that specific hit.
+- **Loss condition:** reaching 0 Life isn't itself a loss - the player
+  loses when they take a *successful* hit while already at 0 Life. A
+  Double Attack's second hit can be the one that does it even if the first
+  hit was what brought Life to exactly 0.
+
+These are exactly the two factors the request that prompted this page
+called out as missing from existing public lethal calculators (Double
+Attack, Banish), plus the other keyword interactions (Blocker, DON!!, K.O.)
+needed for the math to be meaningful at all.
+
+**What this deliberately doesn't do yet:** compute a true win *probability*.
+That needs modeling hidden information - whether the defender's hand
+actually holds enough Counter power to survive a contested battle, and
+what an un-Banished Life card's Trigger would actually do - and both need
+rules/preferences only a user can supply (how to estimate remaining-deck
+Counter odds, which Trigger effects to model vs. ignore). For now, each
+attacking row has an "Assumed opponent Counter here" field - a manual
+stand-in for that: set it to stress-test a specific "what if they have it"
+scenario yourself, rather than this page guessing at a percentage.
+
 ## Architecture
 
 ```
@@ -309,12 +363,16 @@ structure when the plain-text extraction alone isn't enough to tell.
 └─ public/                        ← static dashboard (vanilla HTML/CSS/JS)
    ├─ app.js                      ← price tracker view
    ├─ events.js                   ← event tracker / calendar view
-   └─ nav.js                      ← tab switching between the two
+   ├─ lethal.js                   ← lethal calculator (client-only, no server route)
+   └─ nav.js                      ← tab switching between views
 ```
 
 Each module owns its own `/api/<module-name>` route namespace and its own
 folder under `src/modules/`, mounted the same way in `app.js` - a further
-module would follow the same pattern.
+module would follow the same pattern. The Lethal Calculator is the
+exception: it's pure client-side computation with no history to persist,
+so it has no `src/modules/` folder or routes of its own - just `lethal.js`
+and the markup/templates in `index.html`.
 
 Storage is a flat JSON file (`server/data/db.json` by default, or
 `$DATA_DIR/db.json` - see below), rewritten in full on every debounced

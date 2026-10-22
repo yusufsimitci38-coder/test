@@ -2,6 +2,7 @@ const TABS = {
   price: { tab: document.getElementById('tab-price-tracker'), view: document.getElementById('view-price-tracker') },
   favorites: { tab: document.getElementById('tab-favorites'), view: document.getElementById('view-favorites') },
   event: { tab: document.getElementById('tab-event-tracker'), view: document.getElementById('view-event-tracker') },
+  lethal: { tab: document.getElementById('tab-lethal-calculator'), view: document.getElementById('view-lethal-calculator') },
 };
 
 function activateTab(name) {
@@ -21,3 +22,4 @@ function activateTab(name) {
 TABS.price.tab.addEventListener('click', () => activateTab('price'));
 TABS.favorites.tab.addEventListener('click', () => activateTab('favorites'));
 TABS.event.tab.addEventListener('click', () => activateTab('event'));
+TABS.lethal.tab.addEventListener('click', () => activateTab('lethal'));
