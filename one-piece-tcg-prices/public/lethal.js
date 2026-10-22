@@ -35,10 +35,23 @@
 // Leader directly - defending a Blocker never costs or saves Life in this
 // model, so it isn't considered there. Since a Counter card is discarded
 // once played, that budget is a shared pool spent across every Leader hit
-// this turn, same as DON!!: for each DON!! split, this finds the cheapest
-// way (in assumed Counter) the opponent could spend that budget to survive,
-// and reports whether the line is lethal even against their FULL budget
-// ("robust") or only lethal if they come up short on Counter ("soft").
+// this turn, same as DON!!.
+//
+// Crucially, that budget isn't static through the turn: a Life card dealt
+// as damage is added to the defender's hand unless it's Banished (official
+// Q&A + printed [Banish] card text confirm this is unconditional otherwise -
+// see the commit message for sources), and Counter has no "must have been
+// in hand since the start of the turn" restriction, so a card gained from
+// an EARLIER battle's damage this turn is immediately available to Counter
+// a LATER battle in the same sequence. This calculator accounts for that:
+// each non-Banished Leader hit that's allowed to connect grows the assumed
+// budget (by the same per-card average) before the next battle is
+// evaluated. For each DON!! split, it checks every order of
+// negate-or-allow decisions across that line's Leader-targeted battles to
+// see if ANY of them lets the defender survive within their (growing)
+// budget, and reports whether the line is lethal even against that full
+// budget ("robust") or only lethal if they come up short on Counter
+// ("soft").
 //
 // NOT modeled yet (see the caveat text in index.html): true probability
 // from hidden information - specifically what a given un-Banished Trigger
@@ -49,7 +62,6 @@
 (function () {
   const MAX_DISTRIBUTIONS = 5000;
   const MAX_LINES_SHOWN = 10;
-  const MAX_KNAPSACK_ITEMS = 16; // brute-force subset search stays fast below this
 
   const blockersList = document.getElementById('def-blockers-list');
   const addBlockerBtn = document.getElementById('def-add-blocker');
@@ -276,8 +288,8 @@
       }
 
       const hits = attacker.double ? 2 : 1;
-      const costUnits = Math.floor((effectivePower - defPower) / 1000) + 1;
-      leaderBattles.push({ hits, costUnits });
+      const costPower = (Math.floor((effectivePower - defPower) / 1000) + 1) * 1000;
+      leaderBattles.push({ hits, costPower, banish: attacker.banish });
 
       for (let h = 0; h < hits; h += 1) {
         if (life <= 0) {
@@ -301,46 +313,53 @@
     return { log, lethal, finalLife: life, leaderBattles };
   }
 
-  // Finds the minimum Counter (in 1000-units) the opponent needs to spend to
-  // survive: each Leader-targeted battle is an all-or-nothing item (pay its
-  // cost to fully negate that battle's hits, or pay nothing and take them
-  // all), so this is a small 0/1 knapsack - brute-forced since there are
-  // normally only a handful of Leader-targeted battles per turn. Returns
-  // null if the line isn't lethal in the first place (no Counter needed).
-  function minCounterCostToSurvive(leaderBattles, startingLife) {
+  // Determines whether the defender can survive this line's Leader-targeted
+  // battles using their assumed Counter budget, accounting for the budget
+  // growing mid-turn from non-Banished Life cards reaching hand (see the
+  // header comment for why that's rules-accurate). Each battle's Counter
+  // spend is all-or-nothing: either enough is spent to fully negate it (no
+  // hits, no hand gain from it), or none is spent and it connects in full
+  // (hits count toward lethal, and - unless Banished - its Life card grows
+  // the budget available for battles later in this same order).
+  //
+  // Solved with a DP over (battle index, hits allowed through so far) ->
+  // the MAXIMUM achievable running budget for that state. A higher budget
+  // can only ever help later decisions, so only the max per state needs to
+  // be kept - this keeps the search polynomial (battles × total hits)
+  // instead of exponential, even though the decisions are now sequential
+  // (budget earned from one battle can't be spent on an earlier one).
+  function defenderCanSurvive(leaderBattles, startingLife, initialBudget, avgPerCard) {
     const totalHits = leaderBattles.reduce((sum, b) => sum + b.hits, 0);
-    if (totalHits <= startingLife) return null;
-    const requiredReduction = totalHits - startingLife;
-    const n = leaderBattles.length;
+    if (totalHits <= startingLife) return true; // not even lethal before Counter is considered
 
-    if (n > MAX_KNAPSACK_ITEMS) {
-      // Unusually large attacker count - fall back to a greedy approximation
-      // (best hits-per-cost first) rather than a combinatorial blow-up.
-      const sorted = leaderBattles.slice().sort((a, b) => b.hits / b.costUnits - a.hits / a.costUnits);
-      let hits = 0;
-      let cost = 0;
-      for (const b of sorted) {
-        if (hits >= requiredReduction) break;
-        hits += b.hits;
-        cost += b.costUnits;
-      }
-      return cost;
-    }
+    let dp = new Array(totalHits + 1).fill(-Infinity);
+    dp[0] = initialBudget;
 
-    let best = Infinity;
-    const combos = 1 << n;
-    for (let mask = 0; mask < combos; mask += 1) {
-      let hits = 0;
-      let cost = 0;
-      for (let i = 0; i < n; i += 1) {
-        if (mask & (1 << i)) {
-          hits += leaderBattles[i].hits;
-          cost += leaderBattles[i].costUnits;
+    for (const battle of leaderBattles) {
+      const next = new Array(totalHits + 1).fill(-Infinity);
+      for (let h = 0; h <= totalHits; h += 1) {
+        const budget = dp[h];
+        if (budget === -Infinity) continue;
+
+        // Negate this battle: spend its cost now, no hits, no hand gain.
+        if (budget >= battle.costPower && budget - battle.costPower > next[h]) {
+          next[h] = budget - battle.costPower;
+        }
+
+        // Let it connect: hits count, and it grows the budget unless Banished.
+        const nh = h + battle.hits;
+        if (nh <= totalHits) {
+          const gained = budget + (battle.banish ? 0 : battle.hits * avgPerCard);
+          if (gained > next[nh]) next[nh] = gained;
         }
       }
-      if (hits >= requiredReduction && cost < best) best = cost;
+      dp = next;
     }
-    return best;
+
+    for (let h = 0; h <= Math.min(startingLife, totalHits); h += 1) {
+      if (dp[h] !== -Infinity) return true;
+    }
+    return false;
   }
 
   function calculate() {
@@ -348,7 +367,7 @@
     const startingLife = Math.max(0, Number(defLifeInput.value) || 0);
     const totalDon = Math.max(0, Math.floor(Number(donPoolInput.value)) || 0);
     const blockers = currentBlockers();
-    const { totalAssumed, budgetUnits } = computeCounterBudget();
+    const { totalAssumed, budgetUnits, avgPerCard } = computeCounterBudget();
 
     const attackers = [
       readAttackerRow(leaderRowContainer.querySelector('.lethal-attacker-row'), true),
@@ -378,18 +397,12 @@
       const donUsed = donAssignment.reduce((sum, x) => sum + x, 0);
 
       let category = 'not-lethal';
-      let counterCostNeeded = null;
       if (lethal) {
-        const minCost = minCounterCostToSurvive(leaderBattles, startingLife);
-        if (minCost !== null && minCost <= budgetUnits) {
-          category = 'soft-lethal';
-          counterCostNeeded = minCost;
-        } else {
-          category = 'robust-lethal';
-        }
+        const survives = defenderCanSurvive(leaderBattles, startingLife, totalAssumed, avgPerCard);
+        category = survives ? 'soft-lethal' : 'robust-lethal';
       }
 
-      return { donAssignment, donUsed, lethal, finalLife, log, category, counterCostNeeded };
+      return { donAssignment, donUsed, lethal, finalLife, log, category };
     });
 
     renderSearchResult({
@@ -444,7 +457,7 @@
         ${truncNote}
         <h3>Recommended line — uses fewest DON!! (${cheapest.donUsed} of ${totalDon})</h3>
         ${renderLine(attackers, cheapest, totalDon)}
-        <p class="lethal-hint">Even their full assumed Counter budget can't stop this line.</p>
+        <p class="lethal-hint">Even their full assumed Counter budget can't stop this line - including any Life cards they'd add to hand from earlier hits in this same sequence.</p>
         ${
           others.length
             ? `<h3>Other robustly lethal lines found</h3><div class="lethal-lines-list">${others
@@ -466,7 +479,7 @@
         ${truncNote}
         <h3>Cheapest connecting line (${cheapest.donUsed} of ${totalDon} DON!!)</h3>
         ${renderLine(attackers, cheapest, totalDon)}
-        <p class="lethal-hint">The opponent can survive this by spending ~${cheapest.counterCostNeeded.toLocaleString()}k Counter (within their assumed ~${counterBudgetUnits.toLocaleString()}k budget).</p>
+        <p class="lethal-hint">The opponent can survive this - starting from their assumed budget above, and counting any Life cards they'd add to hand from earlier hits in this same sequence.</p>
         ${
           others.length
             ? `<h3>Other connecting lines found</h3><div class="lethal-lines-list">${others

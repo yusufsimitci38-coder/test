@@ -167,7 +167,10 @@
           <p class="lethal-hint">
             Only modeled for attacks aimed directly at the Leader - Counter spent saving a Blocker never changes
             whether the turn is lethal, so it isn't tracked here. Counter cards are discarded once played, so this
-            budget is shared and spent down across every attack this turn, the same way DON!! is.
+            budget is shared and spent down across every attack this turn, the same way DON!! is - but it can also
+            grow mid-turn: a Life card dealt as damage is added to hand unless it's Banished, and that card is
+            immediately available to Counter a later battle in the same sequence. The search below accounts for
+            that growth when checking whether a line survives.
           </p>
           <div class="lethal-field-row">
             <label for="def-hand-size">Opponent hand size</label>
@@ -234,9 +237,10 @@
         now estimated instead of guessed: enter the opponent's hand size plus how many 1000- and 2000-power Counter
         cards their deck runs, and the calculator averages that into an assumed total Counter budget for the turn
         (Counter cards are discarded once played, so like DON!!, it's one shared pool spent down across every
-        attack - not a fresh value per battle). Results are split into lines that are lethal even against that
-        full assumed budget versus lines that only connect if the opponent is short on Counter, so you can see how
-        risky each plan actually is. Triggers still aren't modeled - what an un-Banished Life card does if revealed
+        attack - not a fresh value per battle - and it grows mid-turn as non-Banished Life cards reach hand from
+        earlier hits in the same sequence). Results are split into lines that are lethal even against that full
+        assumed budget versus lines that only connect if the opponent is short on Counter, so you can see how risky
+        each plan actually is. Triggers still aren't modeled - what an un-Banished Life card does if revealed
         needs rules only you can supply. Likewise, the "N% of DON!! allocations are lethal" figure next to your
         results isn't a real probability either - you're choosing how to split your DON!!, not drawing it at
         random - it's a coverage stat showing how many of the ways you could spend your pool actually win, with the
