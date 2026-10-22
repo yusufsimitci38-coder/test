@@ -299,12 +299,25 @@ so it just runs in the browser against whatever you type in.
 
 Enter the opponent's Leader power, current Life, and any active Blockers;
 your Leader and each Character that can actually attack this turn (power,
-DON!! attached, Double Attack, Banish), and which target each attacker goes
-after (the Leader directly, or a specific Blocker). Attacks resolve top to
-bottom - a Blocker already used earlier in the list can't block again, and
-the calculator flags that and sends the attack at the Leader instead rather
+Double Attack, Banish), and which target each attacker goes after (the
+Leader directly, or a specific Blocker). Attacks resolve top to bottom - a
+Blocker already used earlier in the list can't block again, and the
+calculator flags that and sends the attack at the Leader instead rather
 than silently miscounting. Reorder attacking Characters with the ↑/↓
 buttons on each row; the Leader always resolves first.
+
+**DON!! allocation search:** instead of fixing a DON!! amount per attacker
+and re-running one scenario at a time, enter your total DON!! pool for the
+turn (e.g. 7) in "Total DON!! available this turn" and the calculator
+enumerates every way to split that pool across your attackers (each row's
+optional "Max DON" caps how much a specific attacker could legally
+receive), runs the combat math on each split, and reports which splits are
+lethal. It calls out the cheapest lethal split - the one that uses the
+fewest DON!! - as the recommended line, lists a few other lethal splits
+found, and shows "N of M DON!! allocations explored are lethal (X%)" as a
+coverage stat. Target/attack-order choices stay fixed as you configured
+them above; only the DON!! split is searched, which keeps the search
+bounded (capped at 5,000 explored splits) and the results easy to read.
 
 The combat math is grounded in the official Comprehensive Rules (confirmed
 via a mix of the rules PDF and corroborating community guides - this
@@ -339,7 +352,12 @@ rules/preferences only a user can supply (how to estimate remaining-deck
 Counter odds, which Trigger effects to model vs. ignore). For now, each
 attacking row has an "Assumed opponent Counter here" field - a manual
 stand-in for that: set it to stress-test a specific "what if they have it"
-scenario yourself, rather than this page guessing at a percentage.
+scenario yourself, rather than this page guessing at a percentage. The "N%
+of DON!! allocations are lethal" figure next to search results is the same
+kind of stand-in, not a real probability either - you choose how to split
+your DON!!, you don't draw it at random - it's a coverage stat over the
+splits you could choose from, with the cheapest winning one surfaced so you
+don't have to dig for it.
 
 ## Architecture
 

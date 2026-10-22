@@ -628,3 +628,17 @@ main {
   max-width: 68rem;
   margin-top: 1rem;
 }
+
+.lethal-lines-list { display: flex; flex-direction: column; gap: 0.75rem; }
+
+.lethal-line {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem 0.75rem;
+}
+
+.lethal-line-alloc {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+}

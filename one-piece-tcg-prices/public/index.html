@@ -143,8 +143,10 @@
         Plans out one turn's worth of attacks and tells you whether it's lethal, accounting for
         <strong>Double Attack</strong> (counts as two separate Life hits, each a separate chance at a Trigger),
         <strong>Banish</strong> (the Life card is trashed unseen - no Trigger at all), <strong>Blocker</strong>,
-        <strong>DON!!</strong>, and K.O. comparisons (ties go to the attacker). This is a deterministic calculator,
-        not a true probability engine yet - see the note at the bottom for why, and what's needed to get there.
+        <strong>DON!!</strong>, and K.O. comparisons (ties go to the attacker). Set how many DON!! you have
+        available this turn and it searches every way to split them across your attackers, surfacing which splits
+        are lethal instead of making you test one allocation at a time. This is a deterministic calculator, not a
+        true probability engine yet - see the note at the bottom for why, and what's needed to get there.
       </p>
 
       <div class="lethal-layout">
@@ -167,7 +169,15 @@
 
         <section class="lethal-panel">
           <h2>Your Board (Attacker)</h2>
-          <p class="lethal-hint">DON!! attached gives +1000 power each, for this turn only.</p>
+          <p class="lethal-hint">
+            DON!! attached gives +1000 power each, for this turn only. Enter the total you have available below -
+            the calculator will try every way to split that pool across your attackers for you. Each row's "Max
+            DON" is optional; leave it blank unless a specific attacker is capped lower than your full pool.
+          </p>
+          <div class="lethal-field-row">
+            <label for="atk-don-pool">Total DON!! available this turn</label>
+            <input type="number" id="atk-don-pool" min="0" step="1" value="0" />
+          </div>
 
           <h3>Leader</h3>
           <div class="lethal-dynamic-list" id="atk-leader-row-container"></div>
@@ -184,9 +194,10 @@
         <p class="lethal-hint">
           Attacks resolve top to bottom - a Blocker used earlier in the list is rested and unavailable for a later
           attack targeting it (the calculator will flag this and treat that attack as unblocked instead). Drag isn't
-          supported yet; use the ↑/↓ buttons on each row above to reorder.
+          supported yet; use the ↑/↓ buttons on each row above to reorder. Targets and attack order are fixed as you
+          set them above - only the DON!! split across attackers is searched.
         </p>
-        <button type="button" id="calculate-lethal-btn" class="lethal-calculate-btn">Calculate</button>
+        <button type="button" id="calculate-lethal-btn" class="lethal-calculate-btn">Find Lethal Lines</button>
       </section>
 
       <section class="lethal-panel" id="lethal-result" hidden></section>
@@ -197,7 +208,10 @@
         battle, and whether an un-Banished Life card's Trigger does something that changes the outcome. Both need
         rules/preferences only you can supply (e.g. how you want remaining-deck Counter odds estimated, which
         Trigger effects should be modeled vs ignored) - this calculator is deterministic for now: enter an assumed
-        Counter value per attack to stress-test a "what if they have it" scenario yourself.
+        Counter value per attack to stress-test a "what if they have it" scenario yourself. Likewise, the "N% of
+        DON!! allocations are lethal" figure next to your results isn't a real probability either - you're choosing
+        how to split your DON!!, not drawing it at random - it's a coverage stat showing how many of the ways you
+        could spend your pool actually win, with the cheapest winning split called out for you to play.
       </p>
     </section>
   </main>
@@ -214,7 +228,7 @@
     <div class="lethal-row lethal-attacker-row" data-is-leader="true">
       <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-attacks" checked /> Attacks this turn</label>
       <label>Power <input type="number" class="lethal-atk-power" min="0" step="1000" value="5000" /></label>
-      <label>DON attached <input type="number" class="lethal-atk-don" min="0" value="0" /></label>
+      <label>Max DON (optional) <input type="number" class="lethal-atk-don" min="0" step="1" placeholder="no cap" /></label>
       <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-double" /> Double Attack</label>
       <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-banish" /> Banish</label>
       <label>Target
@@ -230,7 +244,7 @@
     <div class="lethal-row lethal-attacker-row">
       <label>Name <input type="text" class="lethal-atk-name" placeholder="e.g. Sanji" /></label>
       <label>Power <input type="number" class="lethal-atk-power" min="0" step="1000" value="5000" /></label>
-      <label>DON attached <input type="number" class="lethal-atk-don" min="0" value="0" /></label>
+      <label>Max DON (optional) <input type="number" class="lethal-atk-don" min="0" step="1" placeholder="no cap" /></label>
       <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-double" /> Double Attack</label>
       <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-banish" /> Banish</label>
       <label>Target
