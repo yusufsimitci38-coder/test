@@ -563,6 +563,125 @@ main {
 
 .lethal-row-actions { display: flex; gap: 0.3rem; margin-left: auto; }
 
+/* Stepper widget - wraps a number input with -/+ buttons. The input itself
+   keeps its original id/class/value contract; only its look changes. */
+.lethal-stepper {
+  display: inline-flex;
+  align-items: stretch;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--surface-2);
+  vertical-align: middle;
+}
+
+.lethal-stepper-btn {
+  background: var(--surface);
+  color: var(--text);
+  border: none;
+  width: 1.8rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  padding: 0;
+  cursor: pointer;
+}
+
+.lethal-stepper-btn:hover { background: var(--accent); color: #fff; }
+.lethal-stepper-btn:active { filter: brightness(0.9); }
+
+.lethal-stepper-input {
+  border: none !important;
+  background: transparent !important;
+  text-align: center;
+  width: 3.2rem !important;
+  padding: 0.3rem 0.2rem !important;
+}
+
+.lethal-stepper-input::-webkit-outer-spin-button,
+.lethal-stepper-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+
+/* Chip picker - used for Life (0-10), rendered as a row of taps that fill
+   up to the chosen value, like a life-total meter. */
+.lethal-hidden-input {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  border: 0 !important;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.lethal-chip-row { display: flex; flex-wrap: wrap; gap: 0.3rem; margin: 0.3rem 0; }
+
+.lethal-chip {
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--surface-2);
+  color: var(--muted);
+  font-size: 0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  cursor: pointer;
+}
+
+.lethal-chip:hover { border-color: var(--accent); }
+
+.lethal-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+/* Token row - used for DON!! pool and Blocker count, rendered as small
+   diamond tokens (filled = available) instead of a bare number. */
+.lethal-token-row { display: inline-flex; align-items: center; gap: 0.25rem; flex-wrap: wrap; margin-left: 0.5rem; }
+
+.lethal-token {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-radius: 2px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  transform: rotate(45deg);
+}
+
+.lethal-token.filled { background: var(--accent); border-color: var(--accent); }
+
+.lethal-token-overflow { font-size: 0.75rem; color: var(--muted); margin-left: 0.15rem; }
+
+/* Toggle chip - turns a plain checkbox + label (Double Attack, Banish) into
+   a pill that visually fills in when checked. */
+.lethal-chip-toggle {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 0.3rem 0.65rem;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.lethal-chip-toggle:hover { border-color: var(--accent); }
+
+.lethal-chip-toggle:has(input:checked) {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.lethal-chip-toggle input[type='checkbox'] {
+  width: 0.85rem;
+  height: 0.85rem;
+  margin: 0;
+  accent-color: #fff;
+}
+
 .lethal-remove-btn,
 .lethal-move-up,
 .lethal-move-down,
@@ -635,29 +754,165 @@ main {
   margin-top: 1rem;
 }
 
-.lethal-lines-list { display: flex; flex-direction: column; gap: 0.75rem; }
+/* Best-line summary card */
 
-.lethal-line {
-  background: var(--surface-2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 0.6rem 0.75rem;
-}
-
-.lethal-line-alloc {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
+.lethal-best-card {
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  gap: 0.5rem;
+  gap: 1.1rem;
+  margin-bottom: 0.85rem;
+  flex-wrap: wrap;
 }
 
-.lethal-line-percent {
+.lethal-ring {
+  width: 84px;
+  height: 84px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  background: conic-gradient(var(--ring-color) calc(var(--pct) * 1%), var(--border) 0);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.lethal-ring-inner {
+  width: 66px;
+  height: 66px;
+  border-radius: 50%;
   background: var(--surface);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 800;
+}
+
+.lethal-best-body { flex: 1 1 16rem; min-width: 0; }
+
+.lethal-best-badge {
+  display: inline-block;
+  background: var(--surface-2);
   border: 1px solid var(--border);
   border-radius: 999px;
   padding: 0.15rem 0.6rem;
-  font-size: 0.78rem;
+  font-size: 0.72rem;
   font-weight: 700;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  margin-bottom: 0.5rem;
 }
+
+.lethal-best-meta {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+/* Attack sequence tiles - shared by the best-line card and each result row */
+
+.lethal-seq {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+.lethal-seq-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  line-height: 1.1;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-top: 2px solid var(--seq-accent, var(--border));
+  border-radius: 6px;
+  padding: 0.25rem 0.45rem;
+  font-size: 0.72rem;
+}
+
+.lethal-seq-best .lethal-seq-tile { font-size: 0.8rem; padding: 0.35rem 0.55rem; }
+
+.lethal-seq-power { font-weight: 700; }
+.lethal-seq-tag {
+  color: var(--muted);
+  font-size: 0.65em;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  max-width: 5.5rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.lethal-seq-arrow { color: var(--muted); font-size: 0.75rem; }
+
+/* Standalone full log for the best line, and the compact per-line rows */
+
+.lethal-line-detail-standalone {
+  margin-bottom: 0.85rem;
+}
+
+.lethal-line-detail-standalone summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-bottom: 0.5rem;
+}
+
+.lethal-lines-list { display: flex; flex-direction: column; gap: 0.5rem; }
+
+.lethal-line-row {
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.lethal-line-summary {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  padding: 0.5rem 0.65rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.lethal-line-summary::-webkit-details-marker { display: none; }
+
+.lethal-line-percent {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 3.4rem;
+  flex-shrink: 0;
+}
+
+.lethal-line-percent-value { font-size: 0.82rem; font-weight: 700; }
+
+.lethal-line-percent-bar {
+  width: 100%;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.lethal-line-percent-bar span { display: block; height: 100%; border-radius: 999px; }
+
+.lethal-line-percent-yes .lethal-line-percent-value { color: var(--up); }
+.lethal-line-percent-yes .lethal-line-percent-bar span { background: var(--up); }
+.lethal-line-percent-caution .lethal-line-percent-value { color: var(--warn); }
+.lethal-line-percent-caution .lethal-line-percent-bar span { background: var(--warn); }
+.lethal-line-percent-no .lethal-line-percent-value { color: var(--down); }
+.lethal-line-percent-no .lethal-line-percent-bar span { background: var(--down); }
+
+.lethal-line-don {
+  margin-left: auto;
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.lethal-line-detail { padding: 0 0.65rem 0.65rem; }

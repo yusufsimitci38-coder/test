@@ -310,6 +310,23 @@ only a count is asked for - see "Blocking" below for how it's used.
 Reorder attacking Characters with the ↑/↓ buttons on each row; the Leader
 always resolves first.
 
+**Interface:** every numeric field (power, Life, DON!!, deck counts, Active
+Blockers) is a stepper with -/+ buttons instead of a bare `<input
+type="number">`; Life is a row of tap-to-set chips that fill up together
+like a life-total meter; the DON!! pool and Active Blockers counts are
+additionally shown as small diamond tokens so the pool reads at a glance;
+and Double Attack/Banish/"Attacks this turn" are tap-to-toggle pills rather
+than checkboxes. None of this changes what's actually submitted - every
+widget just writes back to the same underlying input and fires the same
+`input` event a real keystroke would, so the calculation code below never
+knows the difference. Results are shown the same way: the top line gets a
+percent ring, a "BEST LINE"/"CLOSEST LINE" badge, and a compact sequence of
+power tiles (one per attacker, consistently colored) showing the DON!!
+split at a glance, with the full play-by-play tucked into a collapsible
+section beneath it; every other explored line gets one compact row -
+percent, a small progress bar, and its own sequence tiles - that expands
+into its own play-by-play on click.
+
 **DON!! allocation search:** instead of fixing a DON!! amount per attacker
 and re-running one scenario at a time, enter your total DON!! pool for the
 turn (e.g. 7) in "Total DON!! available this turn" and the calculator

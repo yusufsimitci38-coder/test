@@ -112,7 +112,7 @@
 
 (function () {
   const MAX_DISTRIBUTIONS = 5000;
-  const MAX_LINES_SHOWN = 6;
+  const MAX_LINES_SHOWN = 10; // compact rows now, so more fit comfortably
   const TRIAL_COUNT = 2000; // Monte Carlo samples per line scored
   const CANDIDATE_CAP = 60; // lines eligible for scoring when more than this are base-lethal
 
@@ -145,6 +145,114 @@
   const calculateBtn = document.getElementById('calculate-lethal-btn');
   const resultEl = document.getElementById('lethal-result');
 
+  // Wraps an existing number <input> with −/+ buttons that bump its value
+  // and dispatch 'input', same as typing would. Purely a DOM/visual change:
+  // the input keeps its id/class and stays the single source of truth, so
+  // every existing selector-based read (readAttackerRow, readDefenderContext,
+  // etc.) keeps working completely unchanged.
+  function enhanceStepper(input, { step = 1, min = 0 } = {}) {
+    if (!input || input.dataset.stepperReady) return;
+    input.dataset.stepperReady = '1';
+    const wrap = document.createElement('div');
+    wrap.className = 'lethal-stepper';
+    input.parentNode.insertBefore(wrap, input);
+    const dec = document.createElement('button');
+    dec.type = 'button';
+    dec.className = 'lethal-stepper-btn';
+    dec.textContent = '−';
+    dec.setAttribute('aria-label', 'Decrease');
+    const inc = document.createElement('button');
+    inc.type = 'button';
+    inc.className = 'lethal-stepper-btn';
+    inc.textContent = '+';
+    inc.setAttribute('aria-label', 'Increase');
+    wrap.append(dec, input, inc);
+    input.classList.add('lethal-stepper-input');
+    const bump = (delta) => {
+      const current = Number(input.value) || 0;
+      input.value = Math.max(min, current + delta);
+      input.dispatchEvent(new Event('input', { bubbles: true }));
+    };
+    dec.addEventListener('click', () => bump(-step));
+    inc.addEventListener('click', () => bump(step));
+  }
+
+  // Replaces a number <input> with a row of tap-to-set chips (0..max) - the
+  // input itself is hidden but still the real value holder. Chips 0..value
+  // highlight together, reading like a Life/filled bar rather than just a
+  // single selected tick.
+  function enhanceChipPicker(input, max) {
+    if (!input || input.dataset.chipReady) return;
+    input.dataset.chipReady = '1';
+    input.classList.add('lethal-hidden-input');
+    const wrap = document.createElement('div');
+    wrap.className = 'lethal-chip-row';
+    input.insertAdjacentElement('afterend', wrap);
+    const chips = [];
+    for (let i = 0; i <= max; i += 1) {
+      const chip = document.createElement('button');
+      chip.type = 'button';
+      chip.className = 'lethal-chip';
+      chip.textContent = String(i);
+      chip.addEventListener('click', () => {
+        input.value = i;
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+      });
+      wrap.appendChild(chip);
+      chips.push(chip);
+    }
+    const refresh = () => {
+      const val = Number(input.value) || 0;
+      chips.forEach((chip, i) => chip.classList.toggle('active', i <= val));
+    };
+    input.addEventListener('input', refresh);
+    refresh();
+  }
+
+  // A small, purely decorative row of filled/unfilled token squares next to
+  // a stepper, so a DON!! pool or Blocker count reads as a visual stack
+  // instead of just a number - capped at `max` tokens shown, with the exact
+  // count always still visible in the stepper's own number field.
+  function enhanceTokenRow(input, max) {
+    if (!input || input.dataset.tokenReady) return;
+    input.dataset.tokenReady = '1';
+    const wrap = document.createElement('div');
+    wrap.className = 'lethal-token-row';
+    input.insertAdjacentElement('afterend', wrap);
+    const tokens = [];
+    for (let i = 0; i < max; i += 1) {
+      const token = document.createElement('span');
+      token.className = 'lethal-token';
+      wrap.appendChild(token);
+      tokens.push(token);
+    }
+    const overflow = document.createElement('span');
+    overflow.className = 'lethal-token-overflow';
+    wrap.appendChild(overflow);
+    const refresh = () => {
+      const val = Number(input.value) || 0;
+      tokens.forEach((token, i) => token.classList.toggle('filled', i < val));
+      overflow.textContent = val > max ? `+${val - max}` : '';
+    };
+    input.addEventListener('input', refresh);
+    refresh();
+  }
+
+  // Restyles a checkbox + its label text into a compact toggle-chip button
+  // (Double Attack / Banish) - the checkbox itself is untouched, just
+  // visually hidden, so `.checked` reads exactly as before.
+  function enhanceToggleChip(label) {
+    if (!label || label.dataset.toggleReady) return;
+    label.dataset.toggleReady = '1';
+    label.classList.add('lethal-chip-toggle');
+  }
+
+  function enhanceAttackerRow(row) {
+    enhanceStepper(row.querySelector('.lethal-atk-power'), { step: 1000 });
+    enhanceStepper(row.querySelector('.lethal-atk-don'), { step: 1 });
+    row.querySelectorAll('.lethal-checkbox').forEach(enhanceToggleChip);
+  }
+
   function addAttackerRow() {
     const node = attackerTemplate.content.cloneNode(true);
     const row = node.querySelector('.lethal-attacker-row');
@@ -158,11 +266,13 @@
       if (next) attackersList.insertBefore(next, row);
     });
     attackersList.appendChild(row);
+    enhanceAttackerRow(row);
   }
 
   function initLeaderRow() {
     const node = leaderTemplate.content.cloneNode(true);
     leaderRowContainer.appendChild(node);
+    enhanceAttackerRow(leaderRowContainer.querySelector('.lethal-attacker-row'));
   }
 
   function readAttackerRow(row, isLeader) {
@@ -606,19 +716,64 @@
     renderSearchResult({ attackers, scored, totalDon, truncated, defender });
   }
 
-  function renderLine(attackers, result, totalDon) {
-    const allocText = attackers.map((a, i) => `${escapeHtml(a.name)}: ${result.donAssignment[i]}`).join(', ');
+  // A consistent, per-attacker accent color (cycled by index, not by DON
+  // amount) so the same attacker reads as the same color across every line
+  // shown - used only for the sequence-tile visualization below, purely
+  // cosmetic.
+  function attackerAccent(index) {
+    return `hsl(${(index * 57) % 360}deg 65% 60%)`;
+  }
+
+  // Renders one line's attack order as a compact row of small tiles - each
+  // one's effective power (base + DON!! this line assigns it) and a short
+  // name tag - so a line can be scanned at a glance instead of read as a
+  // sentence. The full play-by-play log is still available (see
+  // renderLine()), just no longer the only way to see what a line does.
+  function renderSequenceTiles(attackers, result) {
+    return attackers
+      .map((a, i) => {
+        const don = result.donAssignment[i];
+        const effectivePower = a.power + don * 1000;
+        const tag = a.isLeader ? 'Leader' : a.name;
+        const donNote = don ? ` +${don} DON` : '';
+        return `
+          <span class="lethal-seq-tile" style="--seq-accent: ${attackerAccent(i)}" title="${escapeHtml(tag)}${escapeHtml(donNote)}">
+            <span class="lethal-seq-power">${(effectivePower / 1000).toLocaleString()}K</span>
+            <span class="lethal-seq-tag">${escapeHtml(tag)}</span>
+          </span>
+        `;
+      })
+      .join('<span class="lethal-seq-arrow">→</span>');
+  }
+
+  function percentTier(percent) {
+    return percent >= 75 ? 'yes' : percent >= 25 ? 'caution' : 'no';
+  }
+
+  // A compact, scannable row for one line: percent + a thin bar (so
+  // relative strength reads at a glance down the list), the sequence
+  // tiles, and DON!! used - with the full text log tucked behind a native
+  // <details> disclosure instead of always being shown. `open` keeps the
+  // recommended line's log visible by default; every other line starts
+  // collapsed, since the compact row already says what matters for
+  // scanning the list.
+  function renderLine(attackers, result, totalDon, open) {
     const logHtml = result.log.length
       ? `<ul class="lethal-log">${result.log.map((entry) => `<li class="lethal-log-${entry.type}">${escapeHtml(entry.text)}</li>`).join('')}</ul>`
       : '<p class="empty-state">No attacks landed.</p>';
+    const tier = percentTier(result.percent);
     return `
-      <div class="lethal-line">
-        <p class="lethal-line-alloc">
-          <span class="lethal-line-percent">${result.percent}% likely lethal</span>
-          <strong>DON!! used (${result.donUsed} of ${totalDon}):</strong> ${allocText}
-        </p>
-        ${logHtml}
-      </div>
+      <details class="lethal-line-row" ${open ? 'open' : ''}>
+        <summary class="lethal-line-summary">
+          <span class="lethal-line-percent lethal-line-percent-${tier}">
+            <span class="lethal-line-percent-value">${result.percent}%</span>
+            <span class="lethal-line-percent-bar"><span style="width: ${result.percent}%"></span></span>
+          </span>
+          <span class="lethal-seq">${renderSequenceTiles(attackers, result)}</span>
+          <span class="lethal-line-don">${result.donUsed}/${totalDon} DON!!</span>
+        </summary>
+        <div class="lethal-line-detail">${logHtml}</div>
+      </details>
     `;
   }
 
@@ -640,30 +795,48 @@
 
     const top = scored[0];
     const others = scored.slice(1, MAX_LINES_SHOWN);
+    const tier = percentTier(top.percent);
 
     resultEl.classList.remove('lethal-result-yes', 'lethal-result-caution', 'lethal-result-no');
-    resultEl.classList.add(top.percent >= 75 ? 'lethal-result-yes' : top.percent >= 25 ? 'lethal-result-caution' : 'lethal-result-no');
+    resultEl.classList.add(`lethal-result-${tier}`);
 
     const assumptionsNote = `<p class="lethal-hint">Based on ${defender.handSize} hand card${defender.handSize === 1 ? '' : 's'} and ${defender.startingLife} Life drawn from the deck described above, plus ${defender.blockerCount} Blocker${defender.blockerCount === 1 ? '' : 's'} and ${defender.donAvailable} DON!! (both known, not random) - percentages are a Monte Carlo estimate across ${TRIAL_COUNT.toLocaleString()} simulated hands, not a guarantee.</p>`;
     const truncNote = truncated
       ? `<p class="lethal-hint">DON!! search capped at ${MAX_DISTRIBUTIONS.toLocaleString()} allocations explored.</p>`
       : '';
 
-    const headline =
+    const ringColorVar = tier === 'yes' ? 'var(--up)' : tier === 'caution' ? 'var(--warn)' : 'var(--down)';
+    const badge = top.percent === 0 ? 'CLOSEST LINE' : 'BEST LINE';
+    const metaLine =
       top.percent === 0
-        ? `Not lethal — closest line leaves them at ${top.finalLife} Life`
-        : `${top.percent}% likely lethal — recommended line uses ${top.donUsed} of ${totalDon} DON!!`;
-    const icon = top.percent >= 75 ? '☠️' : top.percent >= 25 ? '⚠️' : top.percent > 0 ? '🤏' : '❌';
+        ? `Not lethal with this plan - opponent survives with ${top.finalLife} Life left.`
+        : `${top.donUsed} of ${totalDon} DON!! used - the cheapest line at this chance of lethal.`;
 
     resultEl.innerHTML = `
-      <h2>${icon} ${headline}</h2>
+      <div class="lethal-best-card">
+        <div class="lethal-ring" style="--pct: ${top.percent}; --ring-color: ${ringColorVar}">
+          <div class="lethal-ring-inner">${top.percent}%</div>
+        </div>
+        <div class="lethal-best-body">
+          <span class="lethal-best-badge">${badge}</span>
+          <div class="lethal-seq lethal-seq-best">${renderSequenceTiles(attackers, top)}</div>
+          <p class="lethal-best-meta">${metaLine}</p>
+        </div>
+      </div>
+      <details class="lethal-line-detail-standalone" open>
+        <summary>Full play-by-play for this line</summary>
+        ${
+          top.log.length
+            ? `<ul class="lethal-log">${top.log.map((entry) => `<li class="lethal-log-${entry.type}">${escapeHtml(entry.text)}</li>`).join('')}</ul>`
+            : '<p class="empty-state">No attacks landed.</p>'
+        }
+      </details>
       ${assumptionsNote}
       ${truncNote}
-      ${renderLine(attackers, top, totalDon)}
       ${
         others.length
-          ? `<h3>Other lines worth considering</h3><div class="lethal-lines-list">${others
-              .map((r) => renderLine(attackers, r, totalDon))
+          ? `<h3>All lines explored — ${(others.length + 1).toLocaleString()} shown</h3><div class="lethal-lines-list">${others
+              .map((r) => renderLine(attackers, r, totalDon, false))
               .join('')}</div>`
           : ''
       }
@@ -688,6 +861,24 @@
   [defLeaderColorInput, defLeaderColor2Input].forEach((el) =>
     el.addEventListener('change', updateCounterBudgetPreview),
   );
+
+  // Presentation-only enhancements - every field below keeps its original
+  // id/class and value contract, so none of the calculation code above (or
+  // the input-event listeners just wired up) needs to know these exist.
+  enhanceStepper(defLeaderPowerInput, { step: 1000 });
+  enhanceStepper(defDonAvailableInput, { step: 1 });
+  enhanceStepper(handSizeInput, { step: 1 });
+  enhanceStepper(counter2000Input, { step: 1 });
+  enhanceStepper(counter1000Input, { step: 1 });
+  enhanceStepper(deckSizeInput, { step: 1, min: 1 });
+  enhanceStepper(universalEventCountInput, { step: 1 });
+  enhanceStepper(redEventCountInput, { step: 1 });
+  enhanceStepper(yellowHealCountInput, { step: 1 });
+  enhanceChipPicker(defLifeInput, 10);
+  enhanceStepper(defBlockerCountInput, { step: 1 });
+  enhanceTokenRow(defBlockerCountInput, 8);
+  enhanceStepper(donPoolInput, { step: 1 });
+  enhanceTokenRow(donPoolInput, 12);
 
   initLeaderRow();
   addAttackerRow();
