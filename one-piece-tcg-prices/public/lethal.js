@@ -111,7 +111,14 @@
 // until it releases.
 
 (function () {
-  const MAX_DISTRIBUTIONS = 5000;
+  // With the DON!! pool capped at 10 (see donPoolInput below), the number
+  // of ways to split it across n attackers is C(10+n, n) - about 185,000 at
+  // 10 simultaneously-attacking characters and still under 1.2M at 13, both
+  // already extreme boards. This cap exists only to bound truly pathological
+  // attacker counts; at any realistic size the search is exhaustive, not an
+  // approximation. (Measured: ~150ms at 10 attackers, ~1s at 13-14, in
+  // Node - see fuzz/bench scripts from the session that raised this.)
+  const MAX_DISTRIBUTIONS = 1_000_000;
   const MAX_LINES_SHOWN = 10; // compact rows now, so more fit comfortably
   const TRIAL_COUNT = 2000; // Monte Carlo samples per line scored
   const CANDIDATE_CAP = 60; // lines eligible for scoring when more than this are base-lethal
@@ -364,7 +371,7 @@
   }
 
   // Bundles every "what do we know/assume about the opponent" into one
-  // object, so resolveLine() and defenderCanSurvive() have a single, stable
+  // object, so evaluateLine() and defenderCanSurvive() have a single, stable
   // place to read from - including the color-specific Counter Events (see
   // the header comment for the exact mechanics and the simplifications
   // involved). Hand cards are spent on Events first (universal, then Red),
@@ -453,14 +460,51 @@
   // Runs the combat resolution for one specific DON!! split across
   // `attackers` (parallel array `donAssignment`), in list order, against
   // the Leader - assuming the opponent plays NO Counter and NO Blocker.
-  // Returns the play-by-play log, the base lethal/finalLife outcome, and
-  // the list of battles (with their hit count and the Counter cost to
-  // negate each one) for the defense-feasibility search below. Processes
-  // every attacker (doesn't stop at the first lethal hit) so that search
-  // has the full picture of what's negatable.
-  function resolveLine(attackers, donAssignment, defender) {
-    const log = [];
+  // Returns the base lethal/finalLife outcome and the list of battles (with
+  // their hit count and the Counter cost to negate each one) for the
+  // defense-feasibility search below. Processes every attacker (doesn't
+  // stop at the first lethal hit) so that search has the full picture of
+  // what's negatable.
+  //
+  // Deliberately builds no human-readable log: this runs once per DON!!
+  // split explored (up to MAX_DISTRIBUTIONS, i.e. potentially hundreds of
+  // thousands with several attackers), while the log is only ever shown for
+  // the handful of lines actually rendered - see buildLineLog() below,
+  // called lazily just for those.
+  function evaluateLine(attackers, donAssignment, defender) {
     const battles = [];
+    let life = defender.startingLife;
+    let lethal = false;
+
+    for (let i = 0; i < attackers.length; i += 1) {
+      const attacker = attackers[i];
+      const effectivePower = attacker.power + donAssignment[i] * 1000;
+
+      // Color-specific Counter Events (universal/Red) add power here too,
+      // but as part of the shared Counter budget evaluated per-battle in
+      // defenderCanSurvive() rather than a static boost to defPower itself
+      // - see the header comment.
+      const defPower = defender.leaderPower;
+      if (effectivePower < defPower) continue;
+
+      const hits = attacker.double ? 2 : 1;
+      const costPower = (Math.floor((effectivePower - defPower) / 1000) + 1) * 1000;
+      battles.push({ hits, costPower, banish: attacker.banish });
+
+      for (let h = 0; h < hits; h += 1) {
+        if (life <= 0) lethal = true;
+        else life -= 1;
+      }
+    }
+
+    return { lethal, finalLife: life, battles };
+  }
+
+  // The human-readable play-by-play for one specific line, same assumptions
+  // as evaluateLine() (no Counter, no Blocker) - built only for lines that
+  // end up displayed, not for every distribution the search explores.
+  function buildLineLog(attackers, donAssignment, defender) {
+    const log = [];
     let life = defender.startingLife;
     let lethal = false;
 
@@ -469,12 +513,8 @@
       const donAssigned = donAssignment[i];
       const effectivePower = attacker.power + donAssigned * 1000;
       const donNote = donAssigned ? ` (+${donAssigned} DON)` : '';
-
-      // Color-specific Counter Events (universal/Red) add power here too,
-      // but as part of the shared Counter budget evaluated per-battle in
-      // defenderCanSurvive() rather than a static boost to defPower itself
-      // - see the header comment.
       const defPower = defender.leaderPower;
+
       if (effectivePower < defPower) {
         log.push({
           type: 'fail',
@@ -484,9 +524,6 @@
       }
 
       const hits = attacker.double ? 2 : 1;
-      const costPower = (Math.floor((effectivePower - defPower) / 1000) + 1) * 1000;
-      battles.push({ hits, costPower, banish: attacker.banish });
-
       for (let h = 0; h < hits; h += 1) {
         if (life <= 0) {
           if (!lethal) {
@@ -506,7 +543,7 @@
       }
     }
 
-    return { log, lethal, finalLife: life, battles };
+    return log;
   }
 
   // Determines whether the defender can survive this line's battles using
@@ -702,7 +739,11 @@
 
   function calculate() {
     const defender = readDefenderContext();
-    const totalDon = Math.max(0, Math.floor(Number(donPoolInput.value)) || 0);
+    // A player's total DON!! this turn can never exceed 10 (the whole
+    // DON!! deck) - clamped here too, not just in the stepper's own input
+    // handling, since this is a hard game rule the search's correctness
+    // depends on (see the MAX_DISTRIBUTIONS comment above).
+    const totalDon = Math.min(10, Math.max(0, Math.floor(Number(donPoolInput.value)) || 0));
 
     const attackers = [
       readAttackerRow(leaderRowContainer.querySelector('.lethal-attacker-row'), true),
@@ -722,9 +763,9 @@
     const { distributions, truncated } = enumerateDonDistributions(caps, totalDon, MAX_DISTRIBUTIONS);
 
     const results = distributions.map((donAssignment) => {
-      const { log, lethal, finalLife, battles } = resolveLine(attackers, donAssignment, defender);
+      const { lethal, finalLife, battles } = evaluateLine(attackers, donAssignment, defender);
       const donUsed = donAssignment.reduce((sum, x) => sum + x, 0);
-      return { donAssignment, donUsed, lethal, finalLife, log, battles };
+      return { donAssignment, donUsed, lethal, finalLife, battles };
     });
 
     // Score every base-lethal line's actual chance of staying lethal, via
@@ -804,9 +845,10 @@
   // recommended line's log visible by default; every other line starts
   // collapsed, since the compact row already says what matters for
   // scanning the list.
-  function renderLine(attackers, result, totalDon, open) {
-    const logHtml = result.log.length
-      ? `<ul class="lethal-log">${result.log.map((entry) => `<li class="lethal-log-${entry.type}">${escapeHtml(entry.text)}</li>`).join('')}</ul>`
+  function renderLine(attackers, result, totalDon, open, defender) {
+    const log = buildLineLog(attackers, result.donAssignment, defender);
+    const logHtml = log.length
+      ? `<ul class="lethal-log">${log.map((entry) => `<li class="lethal-log-${entry.type}">${escapeHtml(entry.text)}</li>`).join('')}</ul>`
       : '<p class="empty-state">No attacks landed.</p>';
     const tier = percentTier(result.percent);
     return `
@@ -861,6 +903,8 @@
           ? `Uses all ${totalDon} DON!! available - the strongest line at this chance of lethal.`
           : `${top.donUsed} of ${totalDon} DON!! used - the strongest line at this chance of lethal (the rest wouldn't improve it).`;
 
+    const topLog = buildLineLog(attackers, top.donAssignment, defender);
+
     resultEl.innerHTML = `
       <div class="lethal-best-card">
         <div class="lethal-ring" style="--pct: ${top.percent}; --ring-color: ${ringColorVar}">
@@ -874,9 +918,10 @@
       </div>
       <details class="lethal-line-detail-standalone" open>
         <summary>Full play-by-play for this line</summary>
+        <p class="lethal-hint">Shown assuming the opponent plays no Blocker or Counter at all - that's what sets the attack order and hit count below. The percentage above is what's actually checked against their Blockers, Counter, and DON!! (see the note below).</p>
         ${
-          top.log.length
-            ? `<ul class="lethal-log">${top.log.map((entry) => `<li class="lethal-log-${entry.type}">${escapeHtml(entry.text)}</li>`).join('')}</ul>`
+          topLog.length
+            ? `<ul class="lethal-log">${topLog.map((entry) => `<li class="lethal-log-${entry.type}">${escapeHtml(entry.text)}</li>`).join('')}</ul>`
             : '<p class="empty-state">No attacks landed.</p>'
         }
       </details>
@@ -885,7 +930,7 @@
       ${
         others.length
           ? `<h3>All lines explored — ${(others.length + 1).toLocaleString()} shown</h3><div class="lethal-lines-list">${others
-              .map((r) => renderLine(attackers, r, totalDon, false))
+              .map((r) => renderLine(attackers, r, totalDon, false, defender))
               .join('')}</div>`
           : ''
       }

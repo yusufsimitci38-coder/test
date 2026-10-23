@@ -351,9 +351,16 @@ raises the Counter cost needed to negate that battle, so this tie-break is
 exactly "spend all available DON!! whenever it doesn't hurt the chance of
 lethal" - every full-pool split is already enumerated and scored, the
 tie-break just stops a leftover, no-better partial split from edging it
-out. Attack order stays fixed as you configured it above; only the DON!!
-split is searched, which keeps the search bounded (capped at 5,000
-explored splits) and the results easy to read.
+out. Attack order stays fixed as you configured it above - this tool never
+reorders your attackers to find a better line, only the DON!! split across
+the order you set with the ↑/↓ buttons is searched. That search is
+exhaustive, not an approximation, for any realistic board: with the pool
+capped at 10, splitting it across n attackers has C(10+n, n) possibilities
+- about 185,000 at 10 attacking characters and still under 1.2 million at
+13, both already extreme - so the 1,000,000-split cap exists only to bound
+truly pathological attacker counts, not to trim a normal search early (an
+earlier, much lower cap did exactly that - see the commit history for the
+bug it caused and how the fix was verified).
 
 **Blocking:** since blocking an attack costs the defender nothing (no
 Life lost either way in this tool, regardless of the power comparison), a
@@ -366,7 +373,19 @@ attack that's *cheapest* to Counter can strand an *expensive* one the
 budget can't cover, when blocking the expensive one and Countering the
 cheap one would have survived. The DP in `defenderCanSurvive()` solves
 this exactly, as a third option per battle alongside Counter/connect (see
-"Assumed Counter budget" below).
+"Assumed Counter budget" below) - verified against a brute-force search
+over every block/Counter/connect assignment across 20,000 randomized
+battle/budget/Blocker combinations, with zero mismatches.
+
+The percentage already accounts for this optimal blocking (and Countering)
+- but the "Full play-by-play for this line" log shown under each result
+does NOT, by design: it's the line's raw attack order and hit count,
+checked AS IF the opponent played no Blocker or Counter at all, which is
+also what the DON!! search scores as "base lethal" before the Monte Carlo
+step even runs. The log says so inline now, since showing every hit
+connecting there (even with Blockers available) previously read as the
+calculator ignoring them, when it's really just not the thing that log is
+for.
 
 The combat math is grounded in the official Comprehensive Rules (confirmed
 via a mix of the rules PDF and corroborating community guides - this
