@@ -420,7 +420,11 @@
     const color = defLeaderColorInput.value;
     const secondaryColor = defLeaderColor2Input.value || null;
     const donAvailable = Math.max(0, Math.floor(Number(defDonAvailableInput.value)) || 0);
-    const blockerCount = Math.max(0, Math.floor(Number(defBlockerCountInput.value)) || 0);
+    // The Character Area only has 5 slots, so the defender can never have
+    // more than 5 active Blockers - clamped here too, not just in the
+    // stepper's own input handling (same reasoning as the DON!! pool's
+    // clamp to 10 in calculate()).
+    const blockerCount = Math.min(5, Math.max(0, Math.floor(Number(defBlockerCountInput.value)) || 0));
     const universalEventCount = Math.max(0, Math.floor(Number(universalEventCountInput.value)) || 0);
     const redEventCount = Math.max(0, Math.floor(Number(redEventCountInput.value)) || 0);
     const yellowHealCount = Math.max(0, Math.floor(Number(yellowHealCountInput.value)) || 0);
@@ -1131,8 +1135,10 @@
   enhanceStepper(redEventCountInput, { step: 1 });
   enhanceStepper(yellowHealCountInput, { step: 1 });
   enhanceChipPicker(defLifeInput, 10);
-  enhanceStepper(defBlockerCountInput, { step: 1 });
-  enhanceTokenRow(defBlockerCountInput, 8, 'blocker');
+  // The Character Area only has 5 slots, so Active Blockers can never
+  // exceed 5.
+  enhanceStepper(defBlockerCountInput, { step: 1, max: 5 });
+  enhanceTokenRow(defBlockerCountInput, 5, 'blocker');
   // A player's total DON!! this turn can never exceed 10 - that's the
   // entire DON!! deck.
   enhanceStepper(donPoolInput, { step: 1, max: 10 });

@@ -306,11 +306,14 @@ decision to make. Declaring a Blocker is the DEFENDER's choice, made in
 response to each attack, using whichever active Blocker they still have;
 a Blocker's name and power don't affect whether the turn is lethal either
 (blocking fully prevents Life loss regardless of the power comparison), so
-only a count is asked for - see "Blocking" below for how it's used. "+ Add
-Attacking Character" stops at 5 - the Character Area only has 5 slots, so
-the Leader plus 5 Characters (6 attackers) is the legal maximum a real
-board can ever have, and the button disables itself there rather than
-letting the tool describe an impossible board. There's no attack-order
+only a count is asked for - see "Blocking" below for how it's used. That
+count is capped at 5, same reasoning and same limit as the attacker side
+below: the Character Area only has 5 slots, so the defender can never have
+more than 5 active Blockers either. "+ Add Attacking Character" stops at 5
+- the Character Area only has 5 slots, so the Leader plus 5 Characters (6
+attackers) is the legal maximum a real board can ever have, and the button
+disables itself there rather than letting the tool describe an impossible
+board. There's no attack-order
 control either (no more ↑/↓ buttons) - just list who's on board, and the
 calculator searches the order to attack in too, alongside
 the DON!! split - see "Attack order search" below for why that's not just
