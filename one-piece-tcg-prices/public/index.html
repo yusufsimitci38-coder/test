@@ -144,11 +144,10 @@
         <strong>Double Attack</strong> (counts as two separate Life hits, each a separate chance at a Trigger),
         <strong>Banish</strong> (the Life card is trashed unseen - no Trigger at all), <strong>Blocker</strong>,
         <strong>DON!!</strong>, and K.O. comparisons (ties go to the attacker). Set how many DON!! you have
-        available this turn and it searches every way to split them across your attackers, surfacing which splits
-        are lethal instead of making you test one allocation at a time - and instead of guessing a Counter value
-        per attack, it estimates the opponent's total Counter budget from their hand size and deck composition.
-        This is a deterministic calculator, not a true probability engine yet - see the note at the bottom for why,
-        and what's needed to get there.
+        available this turn and it searches every way to split them across your attackers, then scores each line
+        with a real percentage - how often the opponent's Counter, Blockers, and Yellow's heal (sampled from the
+        deck details you enter, not guessed per attack) would actually save them, simulated across thousands of
+        random hands. See the note at the bottom for exactly what that percentage does and doesn't account for.
       </p>
 
       <div class="lethal-layout">
@@ -306,20 +305,17 @@
       <section class="lethal-panel" id="lethal-result" hidden></section>
 
       <p class="lethal-caveat">
-        <strong>Why this isn't a real probability yet:</strong> a true P(lethal) needs to account for hidden
-        information - the defender's actual hand, and what an un-Banished Life card's Trigger would do. Counter is
-        now estimated instead of guessed: enter the opponent's hand size plus how many 1000- and 2000-power Counter
-        cards their deck runs, and the calculator averages that into an assumed total Counter budget for the turn
-        (Counter cards are discarded once played, so like DON!!, it's one shared pool spent down across every
-        attack - not a fresh value per battle - and it grows mid-turn as non-Banished Life cards reach hand from
-        earlier hits in the same sequence). Results are split into lines that are lethal even against that full
-        assumed budget versus lines that only connect if the opponent is short on Counter, so you can see how risky
-        each plan actually is. Generic Trigger effects still aren't modeled - what an un-Banished Life card does if
-        revealed needs rules only you can supply (Yellow's heal-on-Trigger cards are the one specific case that's
-        covered, since it was described precisely enough to estimate). Likewise, the "N% of DON!! allocations are
-        lethal" figure next to your results isn't a real probability either - you're choosing how to split your
-        DON!!, not drawing it at random - it's a coverage stat showing how many of the ways you could spend your
-        pool actually win, with the cheapest winning split called out for you to play.
+        <strong>How the percentage is calculated:</strong> each line is checked against thousands of random hands
+        and Life piles, drawn from the deck details you enter below (hand size, 1000-/2000-power Counter cards,
+        Counter Events, Yellow's heal-Trigger count, deck size) - not one average guess. For each simulated hand,
+        the calculator works out the best way the opponent could combine their Counter, Blockers, and (for Yellow)
+        healing to survive, the same way a real opponent would; the percentage is how often that fails. DON!! and
+        Blocker counts are entered directly rather than sampled, since those are known board state, not hidden
+        information. What's still approximated: a Life card dealt as damage mid-turn grows the Counter budget
+        available for later battles using the deck's average Counter value, not a fully re-sampled draw; the
+        discard cost for Red's Event and Yellow's heal is assumed to come from non-Counter cards whenever possible;
+        and generic Trigger effects beyond Yellow's heal-on-Trigger still aren't modeled - what an un-Banished Life
+        card does if revealed needs rules only you can supply.
       </p>
       <p class="lethal-caveat">
         <strong>What's deliberately left out of the Counter Events above:</strong> Purple's Slow Slow Beam (2 DON!!,

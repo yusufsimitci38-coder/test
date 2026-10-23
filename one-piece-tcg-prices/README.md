@@ -315,13 +315,13 @@ and re-running one scenario at a time, enter your total DON!! pool for the
 turn (e.g. 7) in "Total DON!! available this turn" and the calculator
 enumerates every way to split that pool across your attackers (each row's
 optional "Max DON" caps how much a specific attacker could legally
-receive), runs the combat math on each split, and reports which splits are
-lethal. It calls out the cheapest lethal split - the one that uses the
-fewest DON!! - as the recommended line, lists a few other lethal splits
-found, and shows "N of M DON!! allocations explored are lethal (X%)" as a
-coverage stat. Attack order stays fixed as you configured it above; only
-the DON!! split is searched, which keeps the search bounded (capped at
-5,000 explored splits) and the results easy to read.
+receive), runs the combat math on each split, and scores every split that's
+lethal at all with a real percentage (see "Lethal percentage" below). The
+split with the highest percentage - ties broken by fewest DON!! used - is
+the recommended line, with a handful of others shown alongside it. Attack
+order stays fixed as you configured it above; only the DON!! split is
+searched, which keeps the search bounded (capped at 5,000 explored splits)
+and the results easy to read.
 
 **Blocking:** since blocking an attack costs the defender nothing (no
 Life lost either way in this tool, regardless of the power comparison), a
@@ -384,27 +384,39 @@ then being played is an intended pattern, not an edge case). So a card
 gained from an *earlier* battle's damage this turn is fair game to Counter a
 *later* battle in the same sequence - exactly like DON!!, it's one shared
 pool spent down across every Leader hit, not a fresh value per battle, but
-unlike DON!! it can also grow mid-turn. For each DON!! split in the search,
-the calculator checks every order of negate-or-allow decisions across that
-line's Leader-targeted battles (Counter per battle is all-or-nothing -
-either it fully negates the attack, or none is spent and it connects in
-full, growing the budget for what comes next) to see whether the defender
-can survive it at all. Results are split into two tiers: **robustly
-lethal** lines that connect even against the opponent's *full* assumed
-budget including any such growth, and lines that are **lethal only if
-they're short on Counter** - connecting now, but survivable - so you can see
-not just whether a line kills, but how much it's betting on the opponent
-being light on Counter this turn.
+unlike DON!! it can also grow mid-turn, using the deck's average Counter
+value per card (see "Lethal percentage" below for why this one part stays
+an average rather than a full sample). For each DON!! split in the search,
+the calculator checks every order of block/Counter/allow decisions across
+that line's battles (Counter per battle is all-or-nothing - either it
+fully negates the attack, or none is spent and it connects in full,
+growing the budget for what comes next) to see whether the defender
+survives a given sample of resources.
 
-**What this deliberately doesn't do yet:** compute a true win *probability*.
-That still needs modeling hidden information - specifically what an
-un-Banished Life card's Trigger would actually do, which needs
-rules/preferences only a user can supply (which Trigger effects to model
-vs. ignore). The "N% of DON!! allocations are lethal" figure next to search
-results is a related kind of stand-in, not a real probability either - you
-choose how to split your DON!!, you don't draw it at random - it's a
-coverage stat over the splits you could choose from, with the cheapest
-winning one surfaced so you don't have to dig for it.
+**Lethal percentage:** rather than one average-based point estimate of the
+opponent's Counter and healing resources, each line is scored by actually
+sampling the hidden information: thousands of random hands and Life piles,
+drawn from the deck composition entered below (hand size, 1000-/2000-power
+Counter cards, Counter Events, Yellow's heal count, deck size), each
+checked for survival with the exact same solver described above - just fed
+that sample's real resources instead of the average. The percentage shown
+is the share of those simulated hands where the defender couldn't survive -
+a genuine Monte Carlo estimate (2,000 samples per line), not a guess. DON!!
+and Blocker counts are read directly rather than sampled, since those are
+known board state the user can see, not hidden information. A quick,
+instant, average-based estimate is still shown live while typing (before
+clicking "Find Lethal Lines") as a rough preview, but the percentage next
+to each result is the rigorous version.
+
+What's still approximated, even in the percentage: the mid-sequence
+hand-growth amount uses the deck's average Counter value rather than a
+fully re-sampled draw (see above); the discard cost for Red's Event and
+Yellow's heal is assumed to come from non-Counter-value cards whenever
+possible, falling back to not using that Event/heal rather than sacrificing
+a Counter card if there aren't enough (see `sampleDefenderResources()`);
+and generic Trigger effects beyond Yellow's heal-on-Trigger still aren't
+modeled - what an un-Banished Life card does if revealed needs rules only a
+user can supply.
 
 **Color-specific Counter Events:** the opponent's Leader color (plus an
 optional secondary color, for dual-color Leaders) and how much DON!! is
@@ -460,12 +472,14 @@ cards count as 3000 Counter, but it isn't in the game yet, so there's
 nothing to add until it releases.
 
 `public/lethal.js` bundles every opponent-side input (Leader power, Life,
-color, DON!! available, Blocker count, Counter budget, Event counts) into
-one `defender` context object via `readDefenderContext()`, read by
-`resolveLine()` and `defenderCanSurvive()` - the latter is where all the
-Event/heal/Blocker math above actually lives, via `defender.counterBudget`
-(includes Event power), `defender.effectiveStartingLife` (includes
-Yellow's heal), and `defender.blockerCount` (the DP's third dimension).
+color, DON!! available, Blocker count, deck composition, Event counts) into
+one `defender` context object via `readDefenderContext()`. `resolveLine()`
+and `defenderCanSurvive()` are unchanged by the percentage feature -
+they're run once per Monte Carlo sample, fed that sample's
+`counterBudget`/`effectiveStartingLife` instead of the single average (see
+`sampleDefenderResources()`, `buildDeckComposition()`, and
+`estimateLethalPercent()`), so the same exact solver already described
+above is what each of the thousands of samples is checked against.
 
 ## Architecture
 

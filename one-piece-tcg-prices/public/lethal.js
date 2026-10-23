@@ -40,39 +40,44 @@
 // below works out, together with Counter, the best way for the defender to
 // spend that fixed number of Blockers to survive.
 //
-// Assumed Counter budget: rather than a manual "counter here" guess typed
-// per attack, the opponent's hand size and deck's Counter-card composition
-// (how many 1000s and 2000s it runs) are averaged into one total Counter
-// budget for the turn. Since a Counter card is discarded once played, that
-// budget is a shared pool spent across every Leader-bound attack this
-// turn, same as DON!!.
+// Assumed Counter budget: the opponent's hand size and deck composition
+// (how many 1000/2000-value cards, Counter Events, and - for Yellow -
+// heal-Trigger cards it runs) describe their deck, same as every other
+// deck-composition input in this tool. defenderCanSurvive() takes that
+// budget as a single number either way it's asked to check, and it isn't
+// static through a sequence: a Life card dealt as damage is added to the
+// defender's hand unless it's Banished (official Q&A + printed [Banish]
+// card text confirm this is unconditional otherwise - see the commit
+// message for sources), and Counter has no "must have been in hand since
+// the start of the turn" restriction, so a card gained from an EARLIER
+// battle's damage this turn is immediately available to Counter a LATER
+// battle in the same sequence - each non-Banished hit that's allowed to
+// connect grows the budget (using the deck's average Counter value per
+// card - see "Lethal percentage" below for why this one part stays an
+// average) before the next battle is evaluated.
 //
-// Crucially, that budget isn't static through the turn: a Life card dealt
-// as damage is added to the defender's hand unless it's Banished (official
-// Q&A + printed [Banish] card text confirm this is unconditional otherwise -
-// see the commit message for sources), and Counter has no "must have been
-// in hand since the start of the turn" restriction, so a card gained from
-// an EARLIER battle's damage this turn is immediately available to Counter
-// a LATER battle in the same sequence. This calculator accounts for that:
-// each non-Banished hit that's allowed to connect grows the assumed budget
-// (by the same per-card average) before the next battle is evaluated. For
-// each DON!! split, it checks every order of block/Counter/allow decisions
-// across that line's battles to see if ANY of them lets the defender
-// survive within their (growing) budget and (fixed) Blocker count, and
-// reports whether the line is lethal even against that full defense
-// ("robust") or only lethal if they come up short ("soft").
-//
-// NOT modeled yet (see the caveat text in index.html): true probability
-// from hidden information - specifically what a generic un-Banished
-// Trigger would actually do. Likewise the "% of DON!! allocations are
-// lethal" figure is a coverage stat over the splits a player could choose,
-// not a real probability.
+// Lethal percentage: rather than one average-based point estimate of the
+// opponent's Counter/heal resources (which is still computed, as a quick
+// live preview while typing - see updateCounterBudgetPreview()), each
+// line shown in the results is scored by actually sampling the hidden
+// information - thousands of random hands and Life piles drawn from the
+// deck composition the user entered (buildDeckComposition() /
+// sampleDefenderResources()), each checked for survival with the exact
+// same defenderCanSurvive() used everywhere else, just fed that sample's
+// REAL resources instead of the average. The percentage is the share of
+// those simulated hands where the defender couldn't survive - a genuine
+// Monte Carlo estimate, not a guess, though still built on the same
+// simplifying assumptions documented throughout this file (discard-cost
+// cards preferring non-Counter cards, the mid-sequence growth amount
+// staying an average, generic Trigger effects beyond Yellow's heal not
+// being modeled, DON!!/Blocker counts being known board state rather than
+// resampled since they aren't hidden information). See the caveat text in
+// index.html for the full list of what's still approximated.
 //
 // Color-specific Counter Events: a Counter Event is a card played from
 // hand for an effect, instead of (or alongside) a printed Counter value -
 // each one below is a SEPARATE resource from the generic 1000/2000-value
-// cards already averaged into the budget above, with its own hand-card
-// (and sometimes DON!!) cost:
+// cards, with its own hand-card (and sometimes DON!!) cost:
 //   - Universal (every color): 1 hand card + 1 DON!! for +4000 power.
 //     Bounded by however many such cards are assumed in the deck AND by
 //     DON!! actually available AND by having a hand card to spare.
@@ -82,18 +87,12 @@
 //     one of these Life cards is dealt as damage, it's played instead of
 //     added to hand (so it doesn't feed the hand-growth mechanic above),
 //     and the defender may discard 1 hand card to add 1 card from the top
-//     of their deck to their Life area - i.e. heal 1 Life. Estimated as
-//     (current Life × assumed count ÷ deck size), since Life cards are
-//     just the top of the same shuffled deck, capped by hand size.
-// All of this is read in readDefenderContext(), which spends hand cards on
-// these Events first (before the generic average-value budget), and feeds
-// the result into defenderCanSurvive() as a bigger starting Counter budget
-// (events) and/or a higher Life threshold to clear (Yellow's heal). Hand
-// cards spent on Yellow's heal are capped by hand size but NOT jointly
-// optimized against the Events above - a deliberate simplification, since
-// exactly solving "Counter now vs. heal later" per battle would need a
-// much larger search; this tends to slightly OVERESTIMATE total defense,
-// which is the safer direction for a lethal calculator to be wrong in.
+//     of their deck to their Life area - i.e. heal 1 Life.
+// Hand cards are spent on these Events first (universal, then Red), with
+// "other" (non-Counter-value, non-Event) cards preferred as the discard
+// cost for Red's Event and Yellow's heal - see sampleDefenderResources()
+// for exactly how, and why that's a safe (defense-overestimating, not
+// underestimating) simplification rather than an exact joint optimization.
 //
 // Deliberately NOT modeled: Purple's Slow Slow Beam (2 DON!!, +2000
 // Counter, rests an enemy Character) - unlike every Counter Event above,
@@ -113,7 +112,9 @@
 
 (function () {
   const MAX_DISTRIBUTIONS = 5000;
-  const MAX_LINES_SHOWN = 10;
+  const MAX_LINES_SHOWN = 6;
+  const TRIAL_COUNT = 2000; // Monte Carlo samples per line scored
+  const CANDIDATE_CAP = 60; // lines eligible for scoring when more than this are base-lethal
 
   const leaderRowContainer = document.getElementById('atk-leader-row-container');
   const leaderTemplate = document.getElementById('lethal-leader-template');
@@ -185,41 +186,32 @@
   }
 
   // Averages the opponent's generic deck composition into an assumed
-  // Counter value per card. This is the baseline 1000/2000-value-card
-  // estimate only - Counter Events (universal/Red/Yellow) are separate
-  // resources layered on top in readDefenderContext() below.
+  // Counter value per card. This average still feeds the mid-sequence
+  // hand-growth estimate in defenderCanSurvive() (see the header comment
+  // for why that part stays an average rather than a full sample), but the
+  // STARTING budget now comes from actual sampled hands - see
+  // buildDeckComposition() below. Also returns the raw n2000/n1000 counts
+  // (not just their average) since the sampler needs real card counts.
   function computeCounterBudget() {
     const handSize = Math.max(0, Math.floor(Number(handSizeInput.value)) || 0);
     const n2000 = Math.max(0, Number(counter2000Input.value)) || 0;
     const n1000 = Math.max(0, Number(counter1000Input.value)) || 0;
     const deckSize = Math.max(1, Number(deckSizeInput.value) || 1);
     const avgPerCard = (2000 * n2000 + 1000 * n1000) / deckSize;
-    return { handSize, avgPerCard, deckSize };
+    return { handSize, avgPerCard, deckSize, n2000, n1000 };
   }
 
+  // A cheap, instant, average-based estimate shown while typing - the
+  // actual lethal percentage shown after clicking "Find Lethal Lines" is
+  // more rigorous (Monte Carlo over real sampled hands, not this average),
+  // so this is a rough preview, not the final answer.
   function updateCounterBudgetPreview() {
     const defender = readDefenderContext();
-    const extras = [];
-    if (defender.universalUses) {
-      extras.push(`${defender.universalUses} DON!! Counter Event${defender.universalUses === 1 ? '' : 's'}`);
-    }
-    if (defender.redUses) {
-      extras.push(`${defender.redUses} 0-cost discard Event${defender.redUses === 1 ? '' : 's'}`);
-    }
-    const extrasText = extras.length ? `, plus ${extras.join(' and ')}` : '';
-    let text =
-      `≈${Math.round(defender.avgPerCard).toLocaleString()} Counter per card in hand → assumed Counter budget ` +
-      `this turn: ~${Math.round(defender.counterBudget).toLocaleString()} from ${defender.handSize} hand ` +
-      `card${defender.handSize === 1 ? '' : 's'}${extrasText}.`;
-    if (defender.healUses) {
-      text +=
-        ` Plus ~${defender.healUses} assumed heal${defender.healUses === 1 ? '' : 's'} this turn (Yellow), ` +
-        `raising their effective Life to ${defender.effectiveStartingLife}.`;
-    }
-    if (defender.blockerCount) {
-      text += ` They can also spend up to ${defender.blockerCount} active Blocker${defender.blockerCount === 1 ? '' : 's'} alongside this.`;
-    }
-    counterBudgetPreview.textContent = text;
+    counterBudgetPreview.textContent =
+      `Quick estimate: ~${Math.round(defender.counterBudget).toLocaleString()} Counter and ` +
+      `${defender.blockerCount} Blocker${defender.blockerCount === 1 ? '' : 's'} available this turn` +
+      `${defender.healUses ? `, plus healing to ${defender.effectiveStartingLife} effective Life` : ''}. ` +
+      `Click "Find Lethal Lines" for an exact percentage.`;
   }
 
   // Bundles every "what do we know/assume about the opponent" into one
@@ -231,7 +223,7 @@
   // Yellow's heal is capped by hand size but tracked independently of that
   // spend - a documented, deliberately conservative simplification.
   function readDefenderContext() {
-    const { avgPerCard, handSize, deckSize } = computeCounterBudget();
+    const { avgPerCard, handSize, deckSize, n2000, n1000 } = computeCounterBudget();
     const startingLife = Math.max(0, Number(defLifeInput.value) || 0);
     const color = defLeaderColorInput.value;
     const secondaryColor = defLeaderColor2Input.value || null;
@@ -267,6 +259,12 @@
       counterBudgetUnits,
       avgPerCard,
       handSize,
+      deckSize,
+      n2000,
+      n1000,
+      universalEventCount,
+      redEventCount,
+      yellowHealCount,
       universalUses,
       redUses,
       healUses,
@@ -443,6 +441,116 @@
     return false;
   }
 
+  // Builds one flat array of card-category labels representing the
+  // opponent's full deck, for Monte Carlo sampling of their actual hand
+  // and Life-pile composition (see "Lethal percentage" in the header
+  // comment). Only the categories that matter to this calculator are
+  // tracked individually - 2000/1000-value Counter cards, universal/Red
+  // Counter Events, and Yellow's heal-Trigger cards - everything else is
+  // lumped into "other". If the specific counts (or the hand+Life draw
+  // size) exceed the entered deck size, the deck is treated as exactly
+  // that large instead of erroring - a deck can't deal more cards than it
+  // has.
+  function buildDeckComposition(defender) {
+    const hasColor = (c) => defender.color === c || defender.secondaryColor === c;
+    const counts = {
+      c2000: defender.n2000,
+      c1000: defender.n1000,
+      universal: defender.universalEventCount,
+      red: hasColor('red') ? defender.redEventCount : 0,
+      yellowHeal: hasColor('yellow') ? defender.yellowHealCount : 0,
+    };
+    const specificTotal = Object.values(counts).reduce((sum, n) => sum + n, 0);
+    const drawNeeded = defender.handSize + defender.startingLife;
+    const effectiveDeckSize = Math.max(defender.deckSize, specificTotal, drawNeeded);
+
+    const composition = [];
+    for (const [category, count] of Object.entries(counts)) {
+      for (let i = 0; i < count; i += 1) composition.push(category);
+    }
+    while (composition.length < effectiveDeckSize) composition.push('other');
+    return composition;
+  }
+
+  function shuffleInPlace(array) {
+    for (let i = array.length - 1; i > 0; i -= 1) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [array[i], array[j]] = [array[j], array[i]];
+    }
+  }
+
+  // One random draw of the opponent's hand and Life pile from
+  // `composition`, converted into the same { counterBudget,
+  // effectiveStartingLife } shape defenderCanSurvive() already expects -
+  // so a sample can be checked with the exact same DP used everywhere
+  // else, just fed real sampled resources instead of the single average.
+  //
+  // Hand cards are spent on Events first (universal, then Red), preferring
+  // "other" cards as the discard cost for Red's Event and Yellow's heal -
+  // keeping Counter-value cards for their printed value whenever possible,
+  // matching how the user described these being played ("discard another
+  // card that does not have a counter"). If there aren't enough "other"
+  // cards to cover a discard, that Event/heal simply isn't used in this
+  // sample rather than sacrificing a Counter-value card - a conservative
+  // simplification that very rarely binds in practice, since most of a
+  // real deck isn't Counter cards or Events.
+  function sampleDefenderResources(composition, defender) {
+    const draw = composition.slice();
+    shuffleInPlace(draw);
+    const hand = draw.slice(0, defender.handSize);
+    const life = draw.slice(defender.handSize, defender.handSize + defender.startingLife);
+    const count = (arr, category) => arr.reduce((n, c) => n + (c === category ? 1 : 0), 0);
+
+    const handC2000 = count(hand, 'c2000');
+    const handC1000 = count(hand, 'c1000');
+    const handUniversal = count(hand, 'universal');
+    const handRed = count(hand, 'red');
+    const handOther = count(hand, 'other');
+    const lifeHeal = count(life, 'yellowHeal');
+
+    const universalUses = Math.min(handUniversal, defender.donAvailable);
+    const redUses = Math.min(handRed, handOther);
+    const healUses = Math.min(lifeHeal, handOther - redUses);
+
+    const counterBudget = handC2000 * 2000 + handC1000 * 1000 + universalUses * 4000 + redUses * 3000;
+    const effectiveStartingLife = defender.startingLife + healUses;
+
+    return { counterBudget, effectiveStartingLife };
+  }
+
+  // Pre-draws `trialCount` random hand/Life samples ONCE per calculate()
+  // call, shared across every DON!! line being scored - the opponent's
+  // deck composition doesn't depend on the attacker's DON!! split, so
+  // there's no reason to re-sample per line.
+  function buildResourceSamples(defender, trialCount) {
+    const composition = buildDeckComposition(defender);
+    const samples = [];
+    for (let i = 0; i < trialCount; i += 1) {
+      samples.push(sampleDefenderResources(composition, defender));
+    }
+    return samples;
+  }
+
+  // Estimates P(this line is lethal) as the share of sampled hands where
+  // the defender's ACTUAL drawn resources - not the single average
+  // estimate - can't save them. Reuses defenderCanSurvive() unchanged for
+  // each sample: only counterBudget/effectiveStartingLife vary per draw,
+  // while avgPerCard (for mid-sequence hand growth - see the header
+  // comment for why that part stays an average) and blockerCount/
+  // donAvailable (known board state, not hidden information) stay fixed.
+  function estimateLethalPercent(battles, resourceSamples, defender) {
+    let survives = 0;
+    for (const sample of resourceSamples) {
+      const trialDefender = {
+        ...defender,
+        counterBudget: sample.counterBudget,
+        effectiveStartingLife: sample.effectiveStartingLife,
+      };
+      if (defenderCanSurvive(battles, trialDefender)) survives += 1;
+    }
+    return Math.round((100 * (resourceSamples.length - survives)) / resourceSamples.length);
+  }
+
   function calculate() {
     const defender = readDefenderContext();
     const totalDon = Math.max(0, Math.floor(Number(donPoolInput.value)) || 0);
@@ -467,17 +575,35 @@
     const results = distributions.map((donAssignment) => {
       const { log, lethal, finalLife, battles } = resolveLine(attackers, donAssignment, defender);
       const donUsed = donAssignment.reduce((sum, x) => sum + x, 0);
-
-      let category = 'not-lethal';
-      if (lethal) {
-        const survives = defenderCanSurvive(battles, defender);
-        category = survives ? 'soft-lethal' : 'robust-lethal';
-      }
-
-      return { donAssignment, donUsed, lethal, finalLife, log, category };
+      return { donAssignment, donUsed, lethal, finalLife, log, battles };
     });
 
-    renderSearchResult({ attackers, results, totalDon, truncated, defender });
+    // Score every base-lethal line's actual chance of staying lethal, via
+    // Monte Carlo over real sampled hands (see estimateLethalPercent()).
+    // Cheap to do for however many lines actually come up in normal use;
+    // CANDIDATE_CAP only kicks in for pathologically large DON!! searches,
+    // favoring the cheapest-DON!! lines so the cap doesn't change results
+    // for the common case.
+    const lethalResults = results.filter((r) => r.lethal);
+    let scored = [];
+    if (lethalResults.length) {
+      const shortlist =
+        lethalResults.length <= CANDIDATE_CAP
+          ? lethalResults
+          : lethalResults
+              .slice()
+              .sort((a, b) => a.donUsed - b.donUsed)
+              .slice(0, CANDIDATE_CAP);
+      const resourceSamples = buildResourceSamples(defender, TRIAL_COUNT);
+      scored = shortlist
+        .map((r) => ({ ...r, percent: estimateLethalPercent(r.battles, resourceSamples, defender) }))
+        .sort((a, b) => b.percent - a.percent || a.donUsed - b.donUsed);
+    } else {
+      const best = results.slice().sort((a, b) => a.finalLife - b.finalLife || b.donUsed - a.donUsed)[0];
+      if (best) scored = [{ ...best, percent: 0 }];
+    }
+
+    renderSearchResult({ attackers, scored, totalDon, truncated, defender });
   }
 
   function renderLine(attackers, result, totalDon) {
@@ -487,93 +613,60 @@
       : '<p class="empty-state">No attacks landed.</p>';
     return `
       <div class="lethal-line">
-        <p class="lethal-line-alloc"><strong>DON!! used (${result.donUsed} of ${totalDon}):</strong> ${allocText}</p>
+        <p class="lethal-line-alloc">
+          <span class="lethal-line-percent">${result.percent}% likely lethal</span>
+          <strong>DON!! used (${result.donUsed} of ${totalDon}):</strong> ${allocText}
+        </p>
         ${logHtml}
       </div>
     `;
   }
 
-  function renderSearchResult({ attackers, results, totalDon, truncated, defender }) {
+  // One number per line replaces the old "robustly lethal vs. soft lethal,
+  // X of Y explored" framing: that distinction is still exactly what the
+  // percentage encodes (a robust line scores near 100%, a soft one lower),
+  // just continuous instead of a binary bucket and without the multi-
+  // paragraph explanation each bucket used to need.
+  function renderSearchResult({ attackers, scored, totalDon, truncated, defender }) {
     resultEl.hidden = false;
 
-    const exploredCount = results.length;
-    const robust = results.filter((r) => r.category === 'robust-lethal').sort((a, b) => a.donUsed - b.donUsed);
-    const soft = results.filter((r) => r.category === 'soft-lethal').sort((a, b) => a.donUsed - b.donUsed);
-    const lethalCount = robust.length + soft.length;
-    const pct = exploredCount ? Math.round((lethalCount / exploredCount) * 100) : 0;
+    if (!scored.length) {
+      resultEl.classList.remove('lethal-result-yes', 'lethal-result-caution');
+      resultEl.classList.add('lethal-result-no');
+      resultEl.innerHTML = '<h2>No attacks landed in any explored line.</h2>';
+      resultEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      return;
+    }
+
+    const top = scored[0];
+    const others = scored.slice(1, MAX_LINES_SHOWN);
 
     resultEl.classList.remove('lethal-result-yes', 'lethal-result-caution', 'lethal-result-no');
-    resultEl.classList.add(robust.length ? 'lethal-result-yes' : soft.length ? 'lethal-result-caution' : 'lethal-result-no');
+    resultEl.classList.add(top.percent >= 75 ? 'lethal-result-yes' : top.percent >= 25 ? 'lethal-result-caution' : 'lethal-result-no');
 
-    const eventParts = [];
-    if (defender.universalUses) eventParts.push(`${defender.universalUses} DON!! Counter Event${defender.universalUses === 1 ? '' : 's'}`);
-    if (defender.redUses) eventParts.push(`${defender.redUses} 0-cost discard Event${defender.redUses === 1 ? '' : 's'}`);
-    const eventsText = eventParts.length ? `, plus ${eventParts.join(' and ')}` : '';
-    const healText = defender.healUses
-      ? ` and ~${defender.healUses} assumed heal${defender.healUses === 1 ? '' : 's'} (raising their effective Life to ${defender.effectiveStartingLife})`
-      : '';
-    const blockerText = defender.blockerCount
-      ? ` plus ${defender.blockerCount} active Blocker${defender.blockerCount === 1 ? '' : 's'} to spend alongside it`
-      : '';
-    const budgetNote = `<p class="lethal-hint">Assuming the opponent has ~${Math.round(defender.counterBudget).toLocaleString()} Counter available this turn (~${defender.counterBudgetUnits.toLocaleString()}k, from their hand size and deck composition${eventsText})${healText}${blockerText}.</p>`;
+    const assumptionsNote = `<p class="lethal-hint">Based on ${defender.handSize} hand card${defender.handSize === 1 ? '' : 's'} and ${defender.startingLife} Life drawn from the deck described above, plus ${defender.blockerCount} Blocker${defender.blockerCount === 1 ? '' : 's'} and ${defender.donAvailable} DON!! (both known, not random) - percentages are a Monte Carlo estimate across ${TRIAL_COUNT.toLocaleString()} simulated hands, not a guarantee.</p>`;
     const truncNote = truncated
-      ? `<p class="lethal-hint">Search capped at ${exploredCount.toLocaleString()} DON!! allocations explored (your pool/attacker count allows more) - showing the best results found within that limit.</p>`
+      ? `<p class="lethal-hint">DON!! search capped at ${MAX_DISTRIBUTIONS.toLocaleString()} allocations explored.</p>`
       : '';
 
-    if (robust.length) {
-      const cheapest = robust[0];
-      const others = robust.slice(1, MAX_LINES_SHOWN);
-      const softNote = soft.length
-        ? ` (plus ${soft.length.toLocaleString()} more that only connect if they're short on Counter)`
-        : '';
-      resultEl.innerHTML = `
-        <h2>☠️ Lethal even against their assumed Counter — ${robust.length.toLocaleString()} of ${exploredCount.toLocaleString()} DON!! allocations explored are robustly lethal (${pct}% lethal overall${softNote})</h2>
-        ${budgetNote}
-        ${truncNote}
-        <h3>Recommended line — uses fewest DON!! (${cheapest.donUsed} of ${totalDon})</h3>
-        ${renderLine(attackers, cheapest, totalDon)}
-        <p class="lethal-hint">Even their full assumed Counter budget can't stop this line - including any Life cards they'd add to hand from earlier hits in this same sequence.</p>
-        ${
-          others.length
-            ? `<h3>Other robustly lethal lines found</h3><div class="lethal-lines-list">${others
-                .map((r) => renderLine(attackers, r, totalDon))
-                .join('')}</div>`
-            : ''
-        }
-      `;
-      resultEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      return;
-    }
+    const headline =
+      top.percent === 0
+        ? `Not lethal — closest line leaves them at ${top.finalLife} Life`
+        : `${top.percent}% likely lethal — recommended line uses ${top.donUsed} of ${totalDon} DON!!`;
+    const icon = top.percent >= 75 ? '☠️' : top.percent >= 25 ? '⚠️' : top.percent > 0 ? '🤏' : '❌';
 
-    if (soft.length) {
-      const cheapest = soft[0];
-      const others = soft.slice(1, MAX_LINES_SHOWN);
-      resultEl.innerHTML = `
-        <h2>⚠️ Lethal only if they're short on Counter — ${soft.length.toLocaleString()} of ${exploredCount.toLocaleString()} DON!! allocations explored connect, but their assumed budget can survive every one (${pct}%)</h2>
-        ${budgetNote}
-        ${truncNote}
-        <h3>Cheapest connecting line (${cheapest.donUsed} of ${totalDon} DON!!)</h3>
-        ${renderLine(attackers, cheapest, totalDon)}
-        <p class="lethal-hint">The opponent can survive this - starting from their assumed budget above, and counting any Life cards they'd add to hand from earlier hits in this same sequence.</p>
-        ${
-          others.length
-            ? `<h3>Other connecting lines found</h3><div class="lethal-lines-list">${others
-                .map((r) => renderLine(attackers, r, totalDon))
-                .join('')}</div>`
-            : ''
-        }
-      `;
-      resultEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-      return;
-    }
-
-    const best = results.slice().sort((a, b) => a.finalLife - b.finalLife || b.donUsed - a.donUsed)[0];
     resultEl.innerHTML = `
-      <h2>Not lethal — 0 of ${exploredCount.toLocaleString()} DON!! allocations explored connect for lethal (0%)</h2>
-      ${budgetNote}
+      <h2>${icon} ${headline}</h2>
+      ${assumptionsNote}
       ${truncNote}
-      <h3>Closest line found</h3>
-      ${renderLine(attackers, best, totalDon)}
+      ${renderLine(attackers, top, totalDon)}
+      ${
+        others.length
+          ? `<h3>Other lines worth considering</h3><div class="lethal-lines-list">${others
+              .map((r) => renderLine(attackers, r, totalDon))
+              .join('')}</div>`
+          : ''
+      }
     `;
     resultEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
