@@ -201,12 +201,11 @@
 
           <h3>Assumed Counter</h3>
           <p class="lethal-hint">
-            Only modeled for attacks aimed directly at the Leader - Counter spent saving a Blocker never changes
-            whether the turn is lethal, so it isn't tracked here. Counter cards are discarded once played, so this
-            budget is shared and spent down across every attack this turn, the same way DON!! is - but it can also
-            grow mid-turn: a Life card dealt as damage is added to hand unless it's Banished, and that card is
-            immediately available to Counter a later battle in the same sequence. The search below accounts for
-            that growth when checking whether a line survives.
+            Counter cards are discarded once played, so this budget is shared and spent down across every attack
+            this turn, the same way DON!! is - but it can also grow mid-turn: a Life card dealt as damage is added
+            to hand unless it's Banished, and that card is immediately available to Counter a later battle in the
+            same sequence. The search below accounts for that growth, and for the Active Blockers count above,
+            when checking whether a line survives.
           </p>
           <div class="lethal-field-row">
             <label for="def-hand-size">Opponent hand size</label>
@@ -260,9 +259,16 @@
           <p class="lethal-hint" id="counter-budget-preview"></p>
 
           <h3>Active Blockers</h3>
-          <p class="lethal-hint">Only Characters that are active (not rested) can block, and each can block at most once per turn.</p>
-          <div id="def-blockers-list" class="lethal-dynamic-list"></div>
-          <button type="button" id="def-add-blocker" class="lethal-add-btn">+ Add Blocker</button>
+          <p class="lethal-hint">
+            How many active (not rested) Characters they have that could block - each can only block once per
+            turn. You don't assign which attack each one blocks: since blocking never costs Life either way in
+            this tool, the calculator works out the best way to spend your Blockers (and Counter) together to
+            survive, the same way it already does for Counter alone.
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-blocker-count">Active Blockers available</label>
+            <input type="number" id="def-blocker-count" min="0" step="1" value="0" />
+          </div>
         </section>
 
         <section class="lethal-panel">
@@ -290,10 +296,9 @@
       <section class="lethal-panel">
         <h2>Attack order</h2>
         <p class="lethal-hint">
-          Attacks resolve top to bottom - a Blocker used earlier in the list is rested and unavailable for a later
-          attack targeting it (the calculator will flag this and treat that attack as unblocked instead). Drag isn't
-          supported yet; use the ↑/↓ buttons on each row above to reorder. Targets and attack order are fixed as you
-          set them above - only the DON!! split across attackers is searched.
+          Attacks resolve top to bottom. Drag isn't supported yet; use the ↑/↓ buttons on each row above to
+          reorder. Attack order is fixed as you set it above - the calculator searches your DON!! split, and (given
+          how many active Blockers you entered above) which attacks the opponent blocks and which they Counter.
         </p>
         <button type="button" id="calculate-lethal-btn" class="lethal-calculate-btn">Find Lethal Lines</button>
       </section>
@@ -323,20 +328,12 @@
         battle, which would need the attack-resolution loop itself to support a battle being called off mid-sequence
         rather than just negated. Dual-color Leaders get both of their colors' Counter Events, but no deeper
         two-color interactions are modeled yet. Blue and Black have no color-specific mechanic to model - Blue's
-        larger boards and heavier Blocker count are already captured by however many rows you add under Active
-        Blockers. Green is the same for now; a Leader releasing in about a month is expected to let certain cards
-        count as 3000 Counter, but it isn't in the game yet.
+        larger boards and heavier Blocker count are already captured by the Active Blockers count above. Green is
+        the same for now; a Leader releasing in about a month is expected to let certain cards count as 3000
+        Counter, but it isn't in the game yet.
       </p>
     </section>
   </main>
-
-  <template id="lethal-blocker-template">
-    <div class="lethal-row lethal-blocker-row">
-      <label>Name <input type="text" class="lethal-blocker-name" placeholder="e.g. Zoro" /></label>
-      <label>Power <input type="number" class="lethal-blocker-power" min="0" step="1000" value="5000" /></label>
-      <button type="button" class="lethal-remove-btn" aria-label="Remove blocker">✕</button>
-    </div>
-  </template>
 
   <template id="lethal-leader-template">
     <div class="lethal-row lethal-attacker-row" data-is-leader="true">
@@ -345,11 +342,6 @@
       <label>Max DON (optional) <input type="number" class="lethal-atk-don" min="0" step="1" placeholder="no cap" /></label>
       <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-double" /> Double Attack</label>
       <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-banish" /> Banish</label>
-      <label>Target
-        <select class="lethal-atk-target">
-          <option value="leader">Opponent Leader (direct)</option>
-        </select>
-      </label>
     </div>
   </template>
 
@@ -360,11 +352,6 @@
       <label>Max DON (optional) <input type="number" class="lethal-atk-don" min="0" step="1" placeholder="no cap" /></label>
       <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-double" /> Double Attack</label>
       <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-banish" /> Banish</label>
-      <label>Target
-        <select class="lethal-atk-target">
-          <option value="leader">Opponent Leader (direct)</option>
-        </select>
-      </label>
       <div class="lethal-row-actions">
         <button type="button" class="lethal-move-up" aria-label="Move up">↑</button>
         <button type="button" class="lethal-move-down" aria-label="Move down">↓</button>

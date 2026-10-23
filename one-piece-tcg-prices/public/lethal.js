@@ -23,19 +23,29 @@
 // DON!! allocation search: rather than asking the user to fix a DON amount
 // per attacker and re-run one scenario at a time, they enter a total DON!!
 // pool and (optionally) a per-attacker cap, and this enumerates every valid
-// way to split the pool across attackers (attack order/targets are fixed as
+// way to split the pool across attackers (attack order is fixed as
 // configured), runs the combat simulation on each split, and reports which
-// splits are lethal. Target/order choices are NOT searched - only the DON!!
-// split is - to keep the search space bounded and the result legible.
+// splits are lethal. Order isn't searched - only the DON!! split is - to
+// keep the search space bounded and the result legible.
+//
+// Blocking: every attacker is simply configured as attacking the Leader -
+// there's no per-attacker "which Blocker intercepts this" assignment,
+// because that's not the attacker's decision to make in the first place.
+// Declaring a Blocker is the DEFENDER's choice, made in response to each
+// attack, using whichever active Blocker they still have - so instead the
+// user enters how many active Blockers the opponent has (a count, not
+// named Characters, since neither a Blocker's name nor its power affects
+// whether the turn is lethal in this tool: blocking fully prevents Life
+// loss from an attack regardless of the power comparison). The search
+// below works out, together with Counter, the best way for the defender to
+// spend that fixed number of Blockers to survive.
 //
 // Assumed Counter budget: rather than a manual "counter here" guess typed
 // per attack, the opponent's hand size and deck's Counter-card composition
 // (how many 1000s and 2000s it runs) are averaged into one total Counter
-// budget for the turn. Counter is only relevant to attacks that target the
-// Leader directly - defending a Blocker never costs or saves Life in this
-// model, so it isn't considered there. Since a Counter card is discarded
-// once played, that budget is a shared pool spent across every Leader hit
-// this turn, same as DON!!.
+// budget for the turn. Since a Counter card is discarded once played, that
+// budget is a shared pool spent across every Leader-bound attack this
+// turn, same as DON!!.
 //
 // Crucially, that budget isn't static through the turn: a Life card dealt
 // as damage is added to the defender's hand unless it's Banished (official
@@ -44,14 +54,13 @@
 // in hand since the start of the turn" restriction, so a card gained from
 // an EARLIER battle's damage this turn is immediately available to Counter
 // a LATER battle in the same sequence. This calculator accounts for that:
-// each non-Banished Leader hit that's allowed to connect grows the assumed
-// budget (by the same per-card average) before the next battle is
-// evaluated. For each DON!! split, it checks every order of
-// negate-or-allow decisions across that line's Leader-targeted battles to
-// see if ANY of them lets the defender survive within their (growing)
-// budget, and reports whether the line is lethal even against that full
-// budget ("robust") or only lethal if they come up short on Counter
-// ("soft").
+// each non-Banished hit that's allowed to connect grows the assumed budget
+// (by the same per-card average) before the next battle is evaluated. For
+// each DON!! split, it checks every order of block/Counter/allow decisions
+// across that line's battles to see if ANY of them lets the defender
+// survive within their (growing) budget and (fixed) Blocker count, and
+// reports whether the line is lethal even against that full defense
+// ("robust") or only lethal if they come up short ("soft").
 //
 // NOT modeled yet (see the caveat text in index.html): true probability
 // from hidden information - specifically what a generic un-Banished
@@ -95,9 +104,9 @@
 // two-color interactions are modeled.
 //
 // Blue and Black have no color-specific mechanic to model: Blue's larger
-// boards and heavier Blocker count are already captured by however many
-// rows the user adds to Active Blockers, not something this calculator
-// needs to assume on its own. Green is the same for now - a Leader
+// boards and heavier Blocker count are already captured by the Active
+// Blockers count, not something this calculator needs to assume on its
+// own. Green is the same for now - a Leader
 // releasing in about a month is expected to let certain cards count as
 // 3000 Counter, but it isn't in the game yet, so there's nothing to add
 // until it releases.
@@ -105,10 +114,6 @@
 (function () {
   const MAX_DISTRIBUTIONS = 5000;
   const MAX_LINES_SHOWN = 10;
-
-  const blockersList = document.getElementById('def-blockers-list');
-  const addBlockerBtn = document.getElementById('def-add-blocker');
-  const blockerTemplate = document.getElementById('lethal-blocker-template');
 
   const leaderRowContainer = document.getElementById('atk-leader-row-container');
   const leaderTemplate = document.getElementById('lethal-leader-template');
@@ -124,6 +129,7 @@
   const defLeaderColorInput = document.getElementById('def-leader-color');
   const defLeaderColor2Input = document.getElementById('def-leader-color-2');
   const defDonAvailableInput = document.getElementById('def-don-available');
+  const defBlockerCountInput = document.getElementById('def-blocker-count');
 
   const handSizeInput = document.getElementById('def-hand-size');
   const counter2000Input = document.getElementById('def-counter-2000-count');
@@ -138,51 +144,6 @@
   const calculateBtn = document.getElementById('calculate-lethal-btn');
   const resultEl = document.getElementById('lethal-result');
 
-  let nextBlockerId = 1;
-
-  function addBlockerRow() {
-    const node = blockerTemplate.content.cloneNode(true);
-    const row = node.querySelector('.lethal-blocker-row');
-    row.dataset.blockerId = String(nextBlockerId++);
-    row.querySelector('.lethal-blocker-name').addEventListener('input', refreshTargetOptions);
-    row.querySelector('.lethal-remove-btn').addEventListener('click', () => {
-      row.remove();
-      refreshTargetOptions();
-    });
-    blockersList.appendChild(row);
-    refreshTargetOptions();
-  }
-
-  function currentBlockers() {
-    return [...blockersList.querySelectorAll('.lethal-blocker-row')].map((row, index) => ({
-      id: row.dataset.blockerId,
-      name: row.querySelector('.lethal-blocker-name').value.trim() || `Blocker ${index + 1}`,
-      power: Number(row.querySelector('.lethal-blocker-power').value) || 0,
-    }));
-  }
-
-  // Rebuilds every attacker row's Target dropdown from the current blocker
-  // list, preserving each row's selection when that blocker still exists -
-  // falling back to "Opponent Leader (direct)" when it was removed/renamed
-  // out from under it.
-  function refreshTargetOptions() {
-    const blockers = currentBlockers();
-    const selects = document.querySelectorAll('.lethal-atk-target');
-    selects.forEach((select) => {
-      const previousValue = select.value;
-      select.innerHTML = '<option value="leader">Opponent Leader (direct)</option>';
-      for (const b of blockers) {
-        const opt = document.createElement('option');
-        opt.value = b.id;
-        opt.textContent = `Block: ${b.name} (${b.power})`;
-        select.appendChild(opt);
-      }
-      if ([...select.options].some((o) => o.value === previousValue)) {
-        select.value = previousValue;
-      }
-    });
-  }
-
   function addAttackerRow() {
     const node = attackerTemplate.content.cloneNode(true);
     const row = node.querySelector('.lethal-attacker-row');
@@ -196,13 +157,11 @@
       if (next) attackersList.insertBefore(next, row);
     });
     attackersList.appendChild(row);
-    refreshTargetOptions();
   }
 
   function initLeaderRow() {
     const node = leaderTemplate.content.cloneNode(true);
     leaderRowContainer.appendChild(node);
-    refreshTargetOptions();
   }
 
   function readAttackerRow(row, isLeader) {
@@ -216,7 +175,6 @@
       donCap,
       double: row.querySelector('.lethal-atk-double').checked,
       banish: row.querySelector('.lethal-atk-banish').checked,
-      target: row.querySelector('.lethal-atk-target').value,
     };
   }
 
@@ -258,6 +216,9 @@
         ` Plus ~${defender.healUses} assumed heal${defender.healUses === 1 ? '' : 's'} this turn (Yellow), ` +
         `raising their effective Life to ${defender.effectiveStartingLife}.`;
     }
+    if (defender.blockerCount) {
+      text += ` They can also spend up to ${defender.blockerCount} active Blocker${defender.blockerCount === 1 ? '' : 's'} alongside this.`;
+    }
     counterBudgetPreview.textContent = text;
   }
 
@@ -275,6 +236,7 @@
     const color = defLeaderColorInput.value;
     const secondaryColor = defLeaderColor2Input.value || null;
     const donAvailable = Math.max(0, Math.floor(Number(defDonAvailableInput.value)) || 0);
+    const blockerCount = Math.max(0, Math.floor(Number(defBlockerCountInput.value)) || 0);
     const universalEventCount = Math.max(0, Math.floor(Number(universalEventCountInput.value)) || 0);
     const redEventCount = Math.max(0, Math.floor(Number(redEventCountInput.value)) || 0);
     const yellowHealCount = Math.max(0, Math.floor(Number(yellowHealCountInput.value)) || 0);
@@ -300,6 +262,7 @@
       color,
       secondaryColor,
       donAvailable,
+      blockerCount,
       counterBudget,
       counterBudgetUnits,
       avgPerCard,
@@ -341,18 +304,16 @@
   }
 
   // Runs the combat resolution for one specific DON!! split across
-  // `attackers` (parallel array `donAssignment`), in list order, against the
-  // fixed defender board - assuming the opponent plays NO Counter. Returns
-  // the play-by-play log, the base lethal/finalLife outcome, and the list of
-  // Leader-targeted battles (with their hit count and the Counter cost to
-  // negate each one) for the Counter-feasibility search below. Processes
-  // every attacker (doesn't stop at the first lethal hit) so that search has
-  // the full picture of what's negatable.
-  function resolveLine(attackers, donAssignment, blockers, defender) {
-    const blockersById = new Map(blockers.map((b) => [b.id, b]));
-    const usedBlockerIds = new Set();
+  // `attackers` (parallel array `donAssignment`), in list order, against
+  // the Leader - assuming the opponent plays NO Counter and NO Blocker.
+  // Returns the play-by-play log, the base lethal/finalLife outcome, and
+  // the list of battles (with their hit count and the Counter cost to
+  // negate each one) for the defense-feasibility search below. Processes
+  // every attacker (doesn't stop at the first lethal hit) so that search
+  // has the full picture of what's negatable.
+  function resolveLine(attackers, donAssignment, defender) {
     const log = [];
-    const leaderBattles = [];
+    const battles = [];
     let life = defender.startingLife;
     let lethal = false;
 
@@ -361,41 +322,6 @@
       const donAssigned = donAssignment[i];
       const effectivePower = attacker.power + donAssigned * 1000;
       const donNote = donAssigned ? ` (+${donAssigned} DON)` : '';
-      let target = attacker.target;
-
-      if (target !== 'leader') {
-        const blocker = blockersById.get(target);
-        if (!blocker) {
-          target = 'leader'; // blocker row was removed after this row was set up
-        } else if (usedBlockerIds.has(blocker.id)) {
-          log.push({
-            type: 'note',
-            text: `${attacker.name}${donNote} was set to be blocked by ${blocker.name}, but that Blocker was already used earlier this turn - attacking the Leader directly instead.`,
-          });
-          target = 'leader';
-        } else {
-          usedBlockerIds.add(blocker.id); // declaring block uses it up whether this battle is won or lost
-          // Counter Events (universal/Red/Yellow) don't apply here: they're
-          // all spent during the Counter step of a Leader-direct battle in
-          // defenderCanSurvive() - Blocker battles never affect Life in
-          // this tool regardless of outcome, so Counter spent on one was
-          // never meaningful here to begin with (same reasoning as plain
-          // Counter above it).
-          const defPower = blocker.power;
-          if (effectivePower >= defPower) {
-            log.push({
-              type: 'ko',
-              text: `${attacker.name}${donNote} (${effectivePower.toLocaleString()}) K.O.'s ${blocker.name} (${defPower.toLocaleString()}). No Life lost.`,
-            });
-          } else {
-            log.push({
-              type: 'fail',
-              text: `${attacker.name}${donNote} (${effectivePower.toLocaleString()}) doesn't get through ${blocker.name} (${defPower.toLocaleString()}). No Life lost.`,
-            });
-          }
-          continue;
-        }
-      }
 
       // Color-specific Counter Events (universal/Red) add power here too,
       // but as part of the shared Counter budget evaluated per-battle in
@@ -412,7 +338,7 @@
 
       const hits = attacker.double ? 2 : 1;
       const costPower = (Math.floor((effectivePower - defPower) / 1000) + 1) * 1000;
-      leaderBattles.push({ hits, costPower, banish: attacker.banish });
+      battles.push({ hits, costPower, banish: attacker.banish });
 
       for (let h = 0; h < hits; h += 1) {
         if (life <= 0) {
@@ -433,61 +359,86 @@
       }
     }
 
-    return { log, lethal, finalLife: life, leaderBattles };
+    return { log, lethal, finalLife: life, battles };
   }
 
-  // Determines whether the defender can survive this line's Leader-targeted
-  // battles using their assumed Counter budget, accounting for the budget
-  // growing mid-turn from non-Banished Life cards reaching hand (see the
-  // header comment for why that's rules-accurate). Each battle's Counter
-  // spend is all-or-nothing: either enough is spent to fully negate it (no
-  // hits, no hand gain from it), or none is spent and it connects in full
-  // (hits count toward lethal, and - unless Banished - its Life card grows
-  // the budget available for battles later in this same order).
+  // Determines whether the defender can survive this line's battles using
+  // their assumed Counter budget AND their fixed Blocker count together,
+  // accounting for the budget growing mid-turn from non-Banished Life cards
+  // reaching hand (see the header comment for why that's rules-accurate).
+  // Each battle has three possible outcomes: Blocked (free, costs 1 of the
+  // fixed Blocker count, no hits, no hand gain - since the attack never
+  // reaches the Leader at all), Countered (spend its cost now, no hits, no
+  // hand gain), or allowed to connect (hits count toward lethal, and -
+  // unless Banished - its Life card grows the budget for battles later in
+  // this same order).
   //
-  // Solved with a DP over (battle index, hits allowed through so far) ->
-  // the MAXIMUM achievable running budget for that state. A higher budget
-  // can only ever help later decisions, so only the max per state needs to
-  // be kept - this keeps the search polynomial (battles × total hits)
-  // instead of exponential, even though the decisions are now sequential
-  // (budget earned from one battle can't be spent on an earlier one).
+  // Blocking is never worse than Countering the same battle (same result,
+  // but free instead of costing budget) - EXCEPT that Blockers are a
+  // separate, limited resource from Counter, so which battles get the free
+  // block and which get Countered (or connect) genuinely matters: blocking
+  // the battle that's cheapest to Counter can strand an expensive one that
+  // the budget can't cover, when blocking the EXPENSIVE one and Countering
+  // the cheap one would have survived. That's a real joint optimization,
+  // not something a simple "block the biggest hits first" rule gets right
+  // in every case - so this solves it exactly.
+  //
+  // Solved with a DP over (battle index, hits allowed through so far,
+  // Blockers used so far) -> the MAXIMUM achievable running Counter budget
+  // for that state. A higher budget can only ever help later decisions, so
+  // only the max per state needs to be kept - this keeps the search
+  // polynomial (battles × total hits × Blocker count) instead of
+  // exponential, even though the decisions are sequential (budget earned
+  // from one battle can't be spent on an earlier one, and a used Blocker
+  // can't be reused).
   //
   // defender.counterBudget already includes color-specific Counter Event
   // power (universal + Red) via readDefenderContext(), and
   // defender.effectiveStartingLife already includes Yellow's assumed heal
   // uses - this function doesn't need to know about color/DON!! directly,
-  // just these two pre-computed numbers.
-  function defenderCanSurvive(leaderBattles, defender) {
-    const { effectiveStartingLife, counterBudget, avgPerCard } = defender;
-    const totalHits = leaderBattles.reduce((sum, b) => sum + b.hits, 0);
-    if (totalHits <= effectiveStartingLife) return true; // not even lethal before Counter is considered
+  // just these two pre-computed numbers plus the Blocker count.
+  function defenderCanSurvive(battles, defender) {
+    const { effectiveStartingLife, counterBudget, avgPerCard, blockerCount } = defender;
+    const totalHits = battles.reduce((sum, b) => sum + b.hits, 0);
+    if (totalHits <= effectiveStartingLife) return true; // not even lethal before any defense
 
-    let dp = new Array(totalHits + 1).fill(-Infinity);
-    dp[0] = counterBudget;
+    const maxBlocks = Math.min(blockerCount, battles.length); // blocking more battles than exist is pointless
 
-    for (const battle of leaderBattles) {
-      const next = new Array(totalHits + 1).fill(-Infinity);
+    let dp = Array.from({ length: totalHits + 1 }, () => new Array(maxBlocks + 1).fill(-Infinity));
+    dp[0][0] = counterBudget;
+
+    for (const battle of battles) {
+      const next = Array.from({ length: totalHits + 1 }, () => new Array(maxBlocks + 1).fill(-Infinity));
       for (let h = 0; h <= totalHits; h += 1) {
-        const budget = dp[h];
-        if (budget === -Infinity) continue;
+        for (let b = 0; b <= maxBlocks; b += 1) {
+          const budget = dp[h][b];
+          if (budget === -Infinity) continue;
 
-        // Negate this battle: spend its cost now, no hits, no hand gain.
-        if (budget >= battle.costPower && budget - battle.costPower > next[h]) {
-          next[h] = budget - battle.costPower;
-        }
+          // Block: free, but uses up 1 of the fixed Blocker count.
+          if (b < maxBlocks && budget > next[h][b + 1]) {
+            next[h][b + 1] = budget;
+          }
 
-        // Let it connect: hits count, and it grows the budget unless Banished.
-        const nh = h + battle.hits;
-        if (nh <= totalHits) {
-          const gained = budget + (battle.banish ? 0 : battle.hits * avgPerCard);
-          if (gained > next[nh]) next[nh] = gained;
+          // Counter: spend its cost now, no hits, no hand gain.
+          if (budget >= battle.costPower && budget - battle.costPower > next[h][b]) {
+            next[h][b] = budget - battle.costPower;
+          }
+
+          // Let it connect: hits count, and it grows the budget unless Banished.
+          const nh = h + battle.hits;
+          if (nh <= totalHits) {
+            const gained = budget + (battle.banish ? 0 : battle.hits * avgPerCard);
+            if (gained > next[nh][b]) next[nh][b] = gained;
+          }
         }
       }
       dp = next;
     }
 
     for (let h = 0; h <= Math.min(effectiveStartingLife, totalHits); h += 1) {
-      if (dp[h] !== -Infinity) return true;
+      for (let b = 0; b <= maxBlocks; b += 1) {
+        if (dp[h][b] !== -Infinity) return true;
+      }
     }
     return false;
   }
@@ -495,7 +446,6 @@
   function calculate() {
     const defender = readDefenderContext();
     const totalDon = Math.max(0, Math.floor(Number(donPoolInput.value)) || 0);
-    const blockers = currentBlockers();
 
     const attackers = [
       readAttackerRow(leaderRowContainer.querySelector('.lethal-attacker-row'), true),
@@ -515,12 +465,12 @@
     const { distributions, truncated } = enumerateDonDistributions(caps, totalDon, MAX_DISTRIBUTIONS);
 
     const results = distributions.map((donAssignment) => {
-      const { log, lethal, finalLife, leaderBattles } = resolveLine(attackers, donAssignment, blockers, defender);
+      const { log, lethal, finalLife, battles } = resolveLine(attackers, donAssignment, defender);
       const donUsed = donAssignment.reduce((sum, x) => sum + x, 0);
 
       let category = 'not-lethal';
       if (lethal) {
-        const survives = defenderCanSurvive(leaderBattles, defender);
+        const survives = defenderCanSurvive(battles, defender);
         category = survives ? 'soft-lethal' : 'robust-lethal';
       }
 
@@ -562,7 +512,10 @@
     const healText = defender.healUses
       ? ` and ~${defender.healUses} assumed heal${defender.healUses === 1 ? '' : 's'} (raising their effective Life to ${defender.effectiveStartingLife})`
       : '';
-    const budgetNote = `<p class="lethal-hint">Assuming the opponent has ~${Math.round(defender.counterBudget).toLocaleString()} Counter available this turn (~${defender.counterBudgetUnits.toLocaleString()}k, from their hand size and deck composition${eventsText})${healText}.</p>`;
+    const blockerText = defender.blockerCount
+      ? ` plus ${defender.blockerCount} active Blocker${defender.blockerCount === 1 ? '' : 's'} to spend alongside it`
+      : '';
+    const budgetNote = `<p class="lethal-hint">Assuming the opponent has ~${Math.round(defender.counterBudget).toLocaleString()} Counter available this turn (~${defender.counterBudgetUnits.toLocaleString()}k, from their hand size and deck composition${eventsText})${healText}${blockerText}.</p>`;
     const truncNote = truncated
       ? `<p class="lethal-hint">Search capped at ${exploredCount.toLocaleString()} DON!! allocations explored (your pool/attacker count allows more) - showing the best results found within that limit.</p>`
       : '';
@@ -625,7 +578,6 @@
     resultEl.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
   }
 
-  addBlockerBtn.addEventListener('click', addBlockerRow);
   addAttackerBtn.addEventListener('click', addAttackerRow);
   calculateBtn.addEventListener('click', calculate);
   [
@@ -635,6 +587,7 @@
     deckSizeInput,
     defLifeInput,
     defDonAvailableInput,
+    defBlockerCountInput,
     universalEventCountInput,
     redEventCountInput,
     yellowHealCountInput,
@@ -644,7 +597,6 @@
   );
 
   initLeaderRow();
-  addBlockerRow();
   addAttackerRow();
   updateCounterBudgetPreview();
 })();

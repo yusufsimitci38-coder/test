@@ -297,14 +297,18 @@ persisted. Unlike the other two modules, there's no external data source or
 history to track: it's a pure "plan this turn's attacks, right now" tool,
 so it just runs in the browser against whatever you type in.
 
-Enter the opponent's Leader power, current Life, and any active Blockers;
-your Leader and each Character that can actually attack this turn (power,
-Double Attack, Banish), and which target each attacker goes after (the
-Leader directly, or a specific Blocker). Attacks resolve top to bottom - a
-Blocker already used earlier in the list can't block again, and the
-calculator flags that and sends the attack at the Leader instead rather
-than silently miscounting. Reorder attacking Characters with the ↑/↓
-buttons on each row; the Leader always resolves first.
+Enter the opponent's Leader power, current Life, and how many active
+Blockers they have; your Leader and each Character that can actually
+attack this turn (power, Double Attack, Banish). Every attacker is simply
+configured as attacking the Leader - there's no per-attacker "which
+Blocker intercepts this" assignment, because that's not the attacker's
+decision to make. Declaring a Blocker is the DEFENDER's choice, made in
+response to each attack, using whichever active Blocker they still have;
+a Blocker's name and power don't affect whether the turn is lethal either
+(blocking fully prevents Life loss regardless of the power comparison), so
+only a count is asked for - see "Blocking" below for how it's used.
+Reorder attacking Characters with the ↑/↓ buttons on each row; the Leader
+always resolves first.
 
 **DON!! allocation search:** instead of fixing a DON!! amount per attacker
 and re-running one scenario at a time, enter your total DON!! pool for the
@@ -315,9 +319,22 @@ receive), runs the combat math on each split, and reports which splits are
 lethal. It calls out the cheapest lethal split - the one that uses the
 fewest DON!! - as the recommended line, lists a few other lethal splits
 found, and shows "N of M DON!! allocations explored are lethal (X%)" as a
-coverage stat. Target/attack-order choices stay fixed as you configured
-them above; only the DON!! split is searched, which keeps the search
-bounded (capped at 5,000 explored splits) and the results easy to read.
+coverage stat. Attack order stays fixed as you configured it above; only
+the DON!! split is searched, which keeps the search bounded (capped at
+5,000 explored splits) and the results easy to read.
+
+**Blocking:** since blocking an attack costs the defender nothing (no
+Life lost either way in this tool, regardless of the power comparison), a
+rational defender always prefers a free Blocker over spending Counter on
+the same attack - but with a LIMITED number of Blockers and a limited
+Counter budget competing for the same battles, *which* attacks get
+blocked and which get Countered genuinely matters. A simple "block the
+biggest hits first" rule gets this wrong in some cases: blocking the
+attack that's *cheapest* to Counter can strand an *expensive* one the
+budget can't cover, when blocking the expensive one and Countering the
+cheap one would have survived. The DP in `defenderCanSurvive()` solves
+this exactly, as a third option per battle alongside Counter/connect (see
+"Assumed Counter budget" below).
 
 The combat math is grounded in the official Comprehensive Rules (confirmed
 via a mix of the rules PDF and corroborating community guides - this
@@ -351,8 +368,11 @@ the typical range is 12-16 and 10-12). The calculator averages that deck
 composition into an assumed Counter value per card, multiplies by hand size,
 and rounds to the nearest 1000 to get a total Counter budget for the turn -
 e.g. the defaults give ≈780/card, so a 5-card hand assumes ≈3,900 available.
-Counter is only modeled for attacks aimed directly at the Leader, since
-defending a Blocker never costs or saves Life in this tool either way.
+Blocking and Countering are the two things that can stop an attack, and
+since every attack targets the Leader in this tool (see "Blocking" above),
+Counter only ever needs to be weighed against that same Leader-bound
+threat - there's no separate "Counter spent defending a Blocker" case to
+account for.
 
 That budget isn't static through the turn, either. Per the official Q&A and
 printed [Banish] card text, a Life card dealt as damage is added to the
@@ -433,18 +453,19 @@ no deeper two-color interactions are modeled yet.
 
 **Blue and Black have no color-specific mechanic to model**, confirmed by
 the user - Blue's larger boards and heavier Blocker count are already
-captured by however many rows the user adds under Active Blockers, not
-something this calculator needs to assume on its own. **Green is the same
+captured by the Active Blockers count, not something this calculator needs
+to assume on its own. **Green is the same
 for now** - a Leader releasing in about a month is expected to let certain
 cards count as 3000 Counter, but it isn't in the game yet, so there's
 nothing to add until it releases.
 
 `public/lethal.js` bundles every opponent-side input (Leader power, Life,
-color, DON!! available, Counter budget, Event counts) into one `defender`
-context object via `readDefenderContext()`, read by `resolveLine()` and
-`defenderCanSurvive()` - the latter is where all the Event/heal math above
-actually lives, via `defender.counterBudget` (includes Event power) and
-`defender.effectiveStartingLife` (includes Yellow's heal).
+color, DON!! available, Blocker count, Counter budget, Event counts) into
+one `defender` context object via `readDefenderContext()`, read by
+`resolveLine()` and `defenderCanSurvive()` - the latter is where all the
+Event/heal/Blocker math above actually lives, via `defender.counterBudget`
+(includes Event power), `defender.effectiveStartingLife` (includes
+Yellow's heal), and `defender.blockerCount` (the DP's third dimension).
 
 ## Architecture
 
