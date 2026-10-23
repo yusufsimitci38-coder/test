@@ -1,0 +1,392 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>One Piece TCG Toolkit</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <h1>One Piece TCG Toolkit</h1>
+    <nav class="tabs">
+      <button class="tab active" type="button" id="tab-price-tracker">Price Tracker</button>
+      <button class="tab" type="button" id="tab-favorites">Favorites</button>
+      <button class="tab" type="button" id="tab-event-tracker">Event Tracker</button>
+      <button class="tab" type="button" id="tab-lethal-calculator">Lethal Calculator</button>
+    </nav>
+  </header>
+
+  <main>
+    <section id="view-price-tracker" class="view">
+      <section class="status-bar" id="status-bar">
+        <div id="status-text">Loading status…</div>
+        <button id="refresh-btn" type="button">Refresh now</button>
+      </section>
+
+      <section class="controls">
+        <div class="filter-group">
+          <label><input type="checkbox" id="alerts-only" /> Alerts only</label>
+        </div>
+        <div class="filter-group">
+          <label for="color-select">Color</label>
+          <select id="color-select">
+            <option value="">All colors</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="set-select">Set</label>
+          <select id="set-select">
+            <option value="">All sets</option>
+          </select>
+        </div>
+        <div class="filter-group">
+          <label for="sort-select">Sort by</label>
+          <select id="sort-select">
+            <option value="pctChange">Biggest 30-day % change</option>
+            <option value="weeklyChange">Biggest 7-day % change</option>
+            <option value="dailyChange">Biggest 1-day % change</option>
+            <option value="price">Highest price</option>
+            <option value="name">Name</option>
+            <option value="color">Color</option>
+            <option value="set">Set</option>
+          </select>
+        </div>
+        <div class="threshold-note" id="threshold-note"></div>
+      </section>
+
+      <nav class="pager" id="cards-pager-top" aria-label="Page navigation"></nav>
+
+      <section id="cards-container" class="cards-grid" aria-live="polite">
+        <p class="empty-state">Loading cards…</p>
+      </section>
+
+      <nav class="pager" id="cards-pager-bottom" aria-label="Page navigation"></nav>
+    </section>
+
+    <section id="view-favorites" class="view" hidden>
+      <section class="controls">
+        <div class="filter-group">
+          <label for="favorites-sort-select">Sort by</label>
+          <select id="favorites-sort-select">
+            <option value="pctChange">Biggest 30-day % change</option>
+            <option value="weeklyChange">Biggest 7-day % change</option>
+            <option value="dailyChange">Biggest 1-day % change</option>
+            <option value="price">Highest price</option>
+            <option value="name">Name</option>
+            <option value="color">Color</option>
+            <option value="set">Set</option>
+          </select>
+        </div>
+      </section>
+
+      <nav class="pager" id="favorites-pager-top" aria-label="Page navigation"></nav>
+
+      <section id="favorites-container" class="cards-grid" aria-live="polite">
+        <p class="empty-state">Loading favorites…</p>
+      </section>
+
+      <nav class="pager" id="favorites-pager-bottom" aria-label="Page navigation"></nav>
+    </section>
+
+    <section id="view-event-tracker" class="view" hidden>
+      <section class="status-bar" id="event-status-bar">
+        <div id="event-status-text">Loading status…</div>
+        <button id="event-refresh-btn" type="button">Refresh now</button>
+      </section>
+
+      <p class="event-source-note">
+        Event dates come from <a href="https://onepiece.limitlesstcg.com" target="_blank" rel="noopener noreferrer">Limitless TCG</a>.
+        Click an event to open its own page for registration details.
+      </p>
+
+      <section class="controls event-controls">
+        <div class="filter-group">
+          <label>
+            <input type="checkbox" id="show-non-english" />
+            Show non-English-speaking events &amp; windows
+          </label>
+        </div>
+      </section>
+
+      <section class="calendar-controls">
+        <button id="cal-prev" type="button" aria-label="Previous month">‹</button>
+        <h2 id="cal-month-label"></h2>
+        <button id="cal-next" type="button" aria-label="Next month">›</button>
+        <button id="cal-today" type="button">Today</button>
+      </section>
+
+      <section class="calendar-grid" id="calendar-grid" aria-live="polite">
+        <p class="empty-state">Loading events…</p>
+      </section>
+
+      <section class="day-detail" id="day-detail" hidden>
+        <h3 id="day-detail-title"></h3>
+        <ul id="day-detail-list"></ul>
+      </section>
+
+      <section class="reg-windows">
+        <h3>Regional Registration Windows</h3>
+        <p class="reg-windows-note">
+          Every upcoming Regional Championship, with venue and a direct registration link — scraped best-effort from the
+          <a href="https://en.onepiece-cardgame.com/events/" target="_blank" rel="noopener noreferrer">official Bandai events page</a>
+          (no public API exists for this). "Registration opens" is the date Bandai publishes for that event's month, plus its own
+          guideline time-of-day per region — the exact time is set by each tournament organizer, so always confirm on the
+          registration link itself before relying on it.
+        </p>
+        <div id="reg-windows-list"><p class="empty-state">Loading…</p></div>
+      </section>
+    </section>
+
+    <section id="view-lethal-calculator" class="view" hidden>
+      <p class="lethal-intro">
+        Plans out one turn's worth of attacks and tells you whether it's lethal, accounting for
+        <strong>Double Attack</strong> (counts as two separate Life hits, each a separate chance at a Trigger),
+        <strong>Banish</strong> (the Life card is trashed unseen - no Trigger at all), <strong>Blocker</strong>,
+        <strong>DON!!</strong>, and K.O. comparisons (ties go to the attacker). Set how many DON!! you have
+        available this turn and it searches every way to split them across your attackers, then scores each line
+        with a real percentage - how often the opponent's Counter, Blockers, and Yellow's heal (sampled from the
+        deck details you enter, not guessed per attack) would actually save them, simulated across thousands of
+        random hands. See the note at the bottom for exactly what that percentage does and doesn't account for.
+      </p>
+
+      <div class="lethal-layout">
+        <section class="lethal-panel">
+          <h2>Opponent (Defender)</h2>
+          <div class="lethal-field-row">
+            <label for="def-leader-power">Leader power</label>
+            <input type="number" id="def-leader-power" min="0" step="1000" value="5000" />
+          </div>
+          <div class="lethal-field-row">
+            <label for="def-life">Current Life</label>
+            <input type="number" id="def-life" min="0" max="10" value="4" />
+          </div>
+
+          <h3>Opponent deck details</h3>
+          <p class="lethal-hint">
+            Color and DON!! available now feed into the Assumed Counter math below for Red, Yellow, and Purple -
+            see that section for the specific fields each one unlocks. Other colors currently only get the
+            DON!!-based Counter Event that's available to every color. Dual-color Leaders get both of their
+            colors' mechanics, but deeper two-color interactions aren't modeled yet, and Purple's Slow Slow Beam is
+            deliberately left out (see the caveat at the bottom for why).
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-leader-color">Leader color</label>
+            <select id="def-leader-color">
+              <option value="green">Green</option>
+              <option value="blue">Blue</option>
+              <option value="black">Black</option>
+              <option value="purple">Purple</option>
+              <option value="red">Red</option>
+              <option value="yellow">Yellow</option>
+            </select>
+          </div>
+          <div class="lethal-field-row">
+            <label for="def-leader-color-2">Secondary color (optional)</label>
+            <select id="def-leader-color-2">
+              <option value="">None</option>
+              <option value="red">Red</option>
+              <option value="green">Green</option>
+              <option value="blue">Blue</option>
+              <option value="purple">Purple</option>
+              <option value="black">Black</option>
+              <option value="yellow">Yellow</option>
+            </select>
+          </div>
+          <div class="lethal-field-row">
+            <label for="def-don-available">DON!! available to them</label>
+            <input type="number" id="def-don-available" min="0" step="1" value="0" />
+          </div>
+
+          <h3>Assumed Counter</h3>
+          <p class="lethal-hint">
+            Counter cards are discarded once played, so this budget is shared and spent down across every attack
+            this turn, the same way DON!! is - but it can also grow mid-turn: a Life card dealt as damage is added
+            to hand unless it's Banished, and that card is immediately available to Counter a later battle in the
+            same sequence. The search below accounts for that growth, and for the Active Blockers count above,
+            when checking whether a line survives.
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-hand-size">Opponent hand size</label>
+            <input type="number" id="def-hand-size" min="0" step="1" value="5" />
+          </div>
+          <div class="lethal-field-row">
+            <label for="def-counter-2000-count">2000-power Counter cards in their deck</label>
+            <input type="number" id="def-counter-2000-count" min="0" step="1" value="14" />
+          </div>
+          <div class="lethal-field-row">
+            <label for="def-counter-1000-count">1000-power Counter cards in their deck</label>
+            <input type="number" id="def-counter-1000-count" min="0" step="1" value="11" />
+          </div>
+          <div class="lethal-field-row">
+            <label for="def-deck-size">Deck size</label>
+            <input type="number" id="def-deck-size" min="1" step="1" value="50" />
+          </div>
+
+          <h3>Counter Events</h3>
+          <p class="lethal-hint">
+            A Counter Event is a card played from hand for a special effect instead of a printed Counter value -
+            counted separately from the generic 1000/2000 cards above. Each one below needs its own hand card, on
+            top of whatever's used for generic Counter.
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-universal-event-count">1-DON!! Counter Events in their deck (+4000, any color)</label>
+            <input type="number" id="def-universal-event-count" min="0" step="1" value="3" />
+          </div>
+          <p class="lethal-hint">
+            Costs 1 hand card + 1 DON!! for +4000 power. Available to every color - most decks run 2-4 copies,
+            Purple decks typically run more, around 4-6.
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-red-event-count">0-cost discard Events in their deck (+3000, Red only)</label>
+            <input type="number" id="def-red-event-count" min="0" step="1" value="3" />
+          </div>
+          <p class="lethal-hint">
+            Costs 2 hand cards (the event itself, plus discarding another card) for +3000 power, no DON!! needed.
+            Has no effect unless Leader color (primary or secondary) is Red. Red decks typically run 2-4 copies.
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-yellow-heal-count">Heal-on-Trigger cards in their deck (Yellow only)</label>
+            <input type="number" id="def-yellow-heal-count" min="0" step="1" value="6" />
+          </div>
+          <p class="lethal-hint">
+            When one of these is dealt as damage, it's played instead of added to hand, and costs 1 hand card to
+            discard for +1 Life from the top of their deck. Has no effect unless Leader color (primary or
+            secondary) is Yellow. Yellow decks typically run 4-8 copies - the calculator estimates how many show up
+            in the current Life total from this count and your deck size above.
+          </p>
+          <p class="lethal-hint" id="counter-budget-preview"></p>
+
+          <h3>Active Blockers</h3>
+          <p class="lethal-hint">
+            How many active (not rested) Characters they have that could block - each can only block once per
+            turn. You don't assign which attack each one blocks: since blocking never costs Life either way in
+            this tool, the calculator works out the best way to spend your Blockers (and Counter) together to
+            survive, the same way it already does for Counter alone.
+          </p>
+          <div class="lethal-field-row">
+            <label for="def-blocker-count">Active Blockers available</label>
+            <input type="number" id="def-blocker-count" min="0" max="5" step="1" value="0" />
+          </div>
+        </section>
+
+        <section class="lethal-panel">
+          <h2>Your Board (Attacker)</h2>
+          <p class="lethal-hint">
+            DON!! attached gives +1000 power each, for this turn only. Enter the total you have available below -
+            the calculator will try every way to split that pool across your attackers for you. Each row's "Max
+            DON" is optional; leave it blank unless a specific attacker is capped lower than your full pool.
+          </p>
+          <div class="lethal-field-row">
+            <label for="atk-don-pool">Total DON!! available this turn</label>
+            <input type="number" id="atk-don-pool" min="0" max="10" step="1" value="0" />
+          </div>
+
+          <h3>Leader</h3>
+          <div class="lethal-dynamic-list" id="atk-leader-row-container"></div>
+
+          <h3>Attacking Characters</h3>
+          <p class="lethal-hint">Only include Characters that can actually attack this turn (not freshly played, unless they have Rush).</p>
+          <div id="atk-characters-list" class="lethal-dynamic-list"></div>
+          <button type="button" id="atk-add-character" class="lethal-add-btn">+ Add Attacking Character</button>
+        </section>
+      </div>
+
+      <section class="lethal-panel">
+        <h2>Find lethal</h2>
+        <p class="lethal-hint">
+          Just list who's attacking above - the calculator searches your DON!! split AND the order to attack in
+          (order can change whether a Life card an earlier hit reveals funds Countering a later, pricier attack),
+          plus (given how many active Blockers you entered above) which attacks the opponent blocks and which they
+          Counter. The recommended order for each line is shown in its results below.
+        </p>
+        <button type="button" id="calculate-lethal-btn" class="lethal-calculate-btn">Find Lethal Lines</button>
+      </section>
+
+      <section class="lethal-panel" id="lethal-result" hidden></section>
+
+      <p class="lethal-caveat">
+        <strong>How the percentage is calculated:</strong> each line is checked against thousands of random hands
+        and Life piles, drawn from the deck details you enter below (hand size, 1000-/2000-power Counter cards,
+        Counter Events, Yellow's heal-Trigger count, deck size) - not one average guess. For each simulated hand,
+        the calculator works out the best way the opponent could combine their Counter, Blockers, and (for Yellow)
+        healing to survive, the same way a real opponent would; the percentage is how often that fails. DON!! and
+        Blocker counts are entered directly rather than sampled, since those are known board state, not hidden
+        information. What's still approximated: a Life card dealt as damage mid-turn grows the Counter budget
+        available for later battles using the deck's average Counter value, not a fully re-sampled draw; the
+        discard cost for Red's Event and Yellow's heal is assumed to come from non-Counter cards whenever possible;
+        and generic Trigger effects beyond Yellow's heal-on-Trigger still aren't modeled - what an un-Banished Life
+        card does if revealed needs rules only you can supply.
+      </p>
+      <p class="lethal-caveat">
+        <strong>What's deliberately left out of the Counter Events above:</strong> Purple's Slow Slow Beam (2 DON!!,
+        +2000 Counter, and rests an enemy Character) isn't modeled - unlike every other Counter effect here, resting
+        a Character can cancel a LATER attack in your line outright rather than just adding defensive power to one
+        battle, which would need the attack-resolution loop itself to support a battle being called off mid-sequence
+        rather than just negated. Dual-color Leaders get both of their colors' Counter Events, but no deeper
+        two-color interactions are modeled yet. Blue and Black have no color-specific mechanic to model - Blue's
+        larger boards and heavier Blocker count are already captured by the Active Blockers count above. Green is
+        the same for now; a Leader releasing in about a month is expected to let certain cards count as 3000
+        Counter, but it isn't in the game yet.
+      </p>
+    </section>
+  </main>
+
+  <template id="lethal-leader-template">
+    <div class="lethal-row lethal-attacker-row" data-is-leader="true">
+      <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-attacks" checked /> Attacks this turn</label>
+      <label>Power <input type="number" class="lethal-atk-power" min="0" step="1000" value="5000" /></label>
+      <label>Max DON (optional) <input type="number" class="lethal-atk-don" min="0" step="1" placeholder="no cap" /></label>
+      <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-double" /> Double Attack</label>
+      <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-banish" /> Banish</label>
+    </div>
+  </template>
+
+  <template id="lethal-attacker-template">
+    <div class="lethal-row lethal-attacker-row">
+      <label>Name <input type="text" class="lethal-atk-name" placeholder="e.g. Sanji" /></label>
+      <label>Power <input type="number" class="lethal-atk-power" min="0" step="1000" value="5000" /></label>
+      <label>Max DON (optional) <input type="number" class="lethal-atk-don" min="0" step="1" placeholder="no cap" /></label>
+      <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-double" /> Double Attack</label>
+      <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-banish" /> Banish</label>
+      <div class="lethal-row-actions">
+        <button type="button" class="lethal-remove-btn" aria-label="Remove attacker">✕</button>
+      </div>
+    </div>
+  </template>
+
+  <template id="card-template">
+    <article class="card">
+      <div class="card-img-wrap">
+        <img class="card-img" alt="" />
+        <span class="alert-badge" hidden>⚠ ALERT</span>
+        <button class="favorite-btn" type="button" aria-label="Toggle favorite" aria-pressed="false">☆</button>
+      </div>
+      <div class="card-body">
+        <h3 class="card-name"></h3>
+        <p class="card-set">
+          <span class="color-dot" hidden></span>
+          <span class="card-set-text"></span>
+        </p>
+        <div class="price-row">
+          <span class="current-price"></span>
+          <span class="pct-change"></span>
+        </div>
+        <span class="provisional-badge" hidden title="Still collecting a full month of price history">30d figure is provisional</span>
+        <div class="mini-changes">
+          <span class="mini-change daily"></span>
+          <span class="mini-change weekly"></span>
+        </div>
+        <p class="price-past"></p>
+        <svg class="sparkline" viewBox="0 0 100 30" preserveAspectRatio="none"></svg>
+        <a class="tcg-link" target="_blank" rel="noopener noreferrer">View on TCGPlayer ↗</a>
+      </div>
+    </article>
+  </template>
+
+  <script src="app.js"></script>
+  <script src="events.js"></script>
+  <script src="lethal.js"></script>
+  <script src="nav.js"></script>
+</body>
+</html>

@@ -1,0 +1,69 @@
+const express = require('express');
+const eventService = require('./eventService');
+
+const router = express.Router();
+
+router.get('/status', (req, res) => {
+  res.json(eventService.getStatus());
+});
+
+router.get('/events', (req, res) => {
+  res.json(eventService.getEvents(req.query.month || ''));
+});
+
+router.get('/registration-windows', (req, res) => {
+  res.json(eventService.getRegistrationWindows());
+});
+
+router.get('/debug/sample', async (req, res) => {
+  try {
+    res.json(await eventService.debugSample());
+  } catch (err) {
+    console.error('[event-tracker] debug sample failed:', err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+router.get('/debug/bandai-raw', async (req, res) => {
+  try {
+    res.json(await eventService.debugBandaiRaw());
+  } catch (err) {
+    console.error('[event-tracker] debug bandai-raw failed:', err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+router.get('/debug/topdeck-sample', async (req, res) => {
+  try {
+    // ?game=<value> tries a candidate game filter against the live API;
+    // ?game= (empty) or ?omitGame=1 omits the game filter entirely - see
+    // topdeckProvider.fetchSampleRaw for why this is useful while the
+    // correct value is still unconfirmed.
+    const overrides = {
+      game: typeof req.query.game === 'string' && req.query.game ? req.query.game : undefined,
+      format: typeof req.query.format === 'string' && req.query.format ? req.query.format : undefined,
+      gameOmitted: req.query.omitGame === '1' || req.query.game === '',
+      // ?start=0 tests "since the beginning of time" - useful for telling
+      // apart "wrong game name" (still empty) from "no results after now
+      // specifically" (non-empty with start=0, confirming the game name is
+      // right but there's nothing currently scheduled).
+      start: typeof req.query.start === 'string' && req.query.start !== '' ? Number(req.query.start) : undefined,
+    };
+    res.json(await eventService.debugTopdeckRaw(overrides));
+  } catch (err) {
+    console.error('[event-tracker] debug topdeck-sample failed:', err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+router.post('/refresh', async (req, res) => {
+  try {
+    const result = await eventService.refreshEvents();
+    res.json(result);
+  } catch (err) {
+    console.error('[event-tracker] refresh failed:', err);
+    res.status(502).json({ error: err.message });
+  }
+});
+
+module.exports = router;
