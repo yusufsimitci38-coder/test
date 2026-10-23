@@ -319,16 +319,33 @@
     });
   }
 
+  // The Character Area has exactly 5 slots, so a legal board can never have
+  // more than 5 Characters attacking alongside the Leader - 6 attackers
+  // total. Enforced here (not just documented) so the board this tool can
+  // describe always matches a real one; it also means the order-search
+  // pass below (bounded up to 8! = 40,320 orders) can never actually hit
+  // its own cutoff - 6! = 720 is comfortably inside it.
+  const MAX_CHARACTERS = 5;
+
+  function updateAddCharacterAvailability() {
+    const atLimit = attackersList.querySelectorAll('.lethal-attacker-row').length >= MAX_CHARACTERS;
+    addAttackerBtn.disabled = atLimit;
+    addAttackerBtn.title = atLimit ? 'The Character Area only has 5 slots - this is the legal maximum.' : '';
+  }
+
   function addAttackerRow() {
+    if (attackersList.querySelectorAll('.lethal-attacker-row').length >= MAX_CHARACTERS) return;
     const node = attackerTemplate.content.cloneNode(true);
     const row = node.querySelector('.lethal-attacker-row');
     row.querySelector('.lethal-remove-btn').addEventListener('click', () => {
       row.remove();
       refreshAttackerAccents();
+      updateAddCharacterAvailability();
     });
     attackersList.appendChild(row);
     enhanceAttackerRow(row);
     refreshAttackerAccents();
+    updateAddCharacterAvailability();
   }
 
   function initLeaderRow() {

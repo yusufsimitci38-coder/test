@@ -306,9 +306,13 @@ decision to make. Declaring a Blocker is the DEFENDER's choice, made in
 response to each attack, using whichever active Blocker they still have;
 a Blocker's name and power don't affect whether the turn is lethal either
 (blocking fully prevents Life loss regardless of the power comparison), so
-only a count is asked for - see "Blocking" below for how it's used. There's
-no attack-order control either (no more ↑/↓ buttons) - just list who's on
-board, and the calculator searches the order to attack in too, alongside
+only a count is asked for - see "Blocking" below for how it's used. "+ Add
+Attacking Character" stops at 5 - the Character Area only has 5 slots, so
+the Leader plus 5 Characters (6 attackers) is the legal maximum a real
+board can ever have, and the button disables itself there rather than
+letting the tool describe an impossible board. There's no attack-order
+control either (no more ↑/↓ buttons) - just list who's on board, and the
+calculator searches the order to attack in too, alongside
 the DON!! split - see "Attack order search" below for why that's not just
 set-dressing and what it costs to search.
 
@@ -365,13 +369,15 @@ only starts to matter once the defender gets to make real block/Counter
 choices against it - see "Attack order search" just below - so it's
 handled as a separate pass, after this one, over just the lines this
 search already found worth scoring. This search is exhaustive, not an
-approximation, for any realistic board: with the pool capped at 10,
-splitting it across n attackers has C(10+n, n) possibilities - about
-185,000 at 10 attacking characters and still under 1.2 million at 13, both
-already extreme - so the 1,000,000-split cap exists only to bound truly
-pathological attacker counts, not to trim a normal search early (an
-earlier, much lower cap did exactly that - see the commit history for the
-bug it caused and how the fix was verified).
+approximation, for any legal board: with the pool capped at 10 and at most
+6 attackers (1 Leader + 5 Characters - the Character Area's real limit, now
+enforced by the "+ Add Attacking Character" button itself), splitting the
+pool across them has C(16,6) = 8,008 possibilities at most - trivial next
+to the 1,000,000-split cap. That cap is sized for far more than any real
+board needs (up to 13 attackers, impossible in a legal game, would still
+fit under it) purely as a safety margin, not because this search was ever
+meant to be approximate (an earlier, much lower cap genuinely was - see the
+commit history for the bug it caused and how the fix was verified).
 
 **Attack order search:** a battle that's allowed to CONNECT early can fund
 Countering a pricier one later (see "Assumed Counter budget" below for the
@@ -395,13 +401,14 @@ promising reordering cheaply, then - critically - confirms that candidate
 actually scores HIGHER under the real Monte Carlo check before ever
 adopting it. A bad guess from the cheap pass just gets discarded, so this
 can only ever improve a line's percentage, never make it worse than
-leaving its battles in roster order. Exhaustive up to 8 simultaneously
-attacking units (8! = 40,320 orders - already an extreme board); beyond
-that this pass is skipped for that candidate rather than attempted
-partially, since a non-exhaustive order search can't be trusted to find
-the right answer, only roster order's own score is kept. The order a line
-settles on is exactly what's shown in its results - its sequence tiles and
-its play-by-play log both narrate in that attack order, not roster order.
+leaving its battles in roster order. Bounded at 8! = 40,320 orders; below
+that cutoff this is exhaustive, not a heuristic. With the 5-Character cap
+above, a line can have at most 6 attackers (6! = 720 orders) - well inside
+that bound - so in practice this pass is ALWAYS exhaustive for any legal
+board; the 40,320 cutoff exists only as a safety margin, not because a real
+board can reach it. The order a line settles on is exactly what's shown in
+its results - its sequence tiles and its play-by-play log both narrate in
+that attack order, not roster order.
 
 **Blocking:** since blocking an attack costs the defender nothing (no
 Life lost either way in this tool, regardless of the power comparison), a

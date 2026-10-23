@@ -707,9 +707,10 @@ main {
 }
 
 .lethal-remove-btn:hover,
-.lethal-add-btn:hover { border-color: var(--accent); }
+.lethal-add-btn:hover:not(:disabled) { border-color: var(--accent); }
 
 .lethal-add-btn { margin-top: 0.6rem; }
+.lethal-add-btn:disabled { opacity: 0.5; cursor: default; }
 
 .lethal-calculate-btn {
   background: var(--accent);
