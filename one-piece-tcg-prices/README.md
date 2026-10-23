@@ -306,9 +306,11 @@ decision to make. Declaring a Blocker is the DEFENDER's choice, made in
 response to each attack, using whichever active Blocker they still have;
 a Blocker's name and power don't affect whether the turn is lethal either
 (blocking fully prevents Life loss regardless of the power comparison), so
-only a count is asked for - see "Blocking" below for how it's used.
-Reorder attacking Characters with the ↑/↓ buttons on each row; the Leader
-always resolves first.
+only a count is asked for - see "Blocking" below for how it's used. There's
+no attack-order control either (no more ↑/↓ buttons) - just list who's on
+board, and the calculator searches the order to attack in too, alongside
+the DON!! split - see "Attack order search" below for why that's not just
+set-dressing and what it costs to search.
 
 **Interface:** every numeric field (power, Life, DON!!, deck counts, Active
 Blockers) is a stepper with -/+ buttons instead of a bare `<input
@@ -322,18 +324,21 @@ what's actually submitted - every widget just writes back to the same
 underlying input and fires the same `input` event a real keystroke would,
 so the calculation code below never knows the difference. Each attacker
 row in "Your Board" also picks up a thin left-border accent color, cycled
-by position the same way the results view colors its sequence tiles
-(`attackerAccent()`/`refreshAttackerAccents()`), kept in sync on every add,
-remove, reorder, and on the Leader's "Attacks this turn" toggle (the only
-thing that can shift the other rows' positions in the attack order) - so
-the row that set up a line and the tile it produced in the results always
-match colors. Results are shown the same way: the top line gets a
-percent ring, a "BEST LINE"/"CLOSEST LINE" badge, and a compact sequence of
-power tiles (one per attacker, consistently colored) showing the DON!!
-split at a glance, with the full play-by-play tucked into a collapsible
-section beneath it; every other explored line gets one compact row -
-percent, a small progress bar, and its own sequence tiles - that expands
-into its own play-by-play on click.
+by its stable ROSTER position - not by where a given line ends up
+attacking it, which the search can now change - the same way the results
+view colors its sequence tiles (`attackerAccent()`/`refreshAttackerAccents()`),
+kept in sync on every add, remove, and the Leader's "Attacks this turn"
+toggle (the only thing that can shift Characters' roster indices). A
+tile's color always matches its attacker's board row, so a line's sequence
+reads as "these specific attackers, in this order" even when two different
+lines attack in different orders. Results are shown the same way: the top
+line gets a percent ring, a "BEST LINE"/"CLOSEST LINE" badge, and a compact
+sequence of power tiles (one per attacker, in that line's chosen attack
+order, consistently colored by identity) showing both the DON!! split and
+the order at a glance, with the full play-by-play tucked into a
+collapsible section beneath it; every other explored line gets one compact
+row - percent, a small progress bar, and its own sequence tiles - that
+expands into its own play-by-play on click.
 
 **DON!! allocation search:** a player's total DON!! this turn can never
 exceed 10 - that's the entire DON!! deck - so "Total DON!! available this
@@ -351,16 +356,52 @@ raises the Counter cost needed to negate that battle, so this tie-break is
 exactly "spend all available DON!! whenever it doesn't hurt the chance of
 lethal" - every full-pool split is already enumerated and scored, the
 tie-break just stops a leftover, no-better partial split from edging it
-out. Attack order stays fixed as you configured it above - this tool never
-reorders your attackers to find a better line, only the DON!! split across
-the order you set with the ↑/↓ buttons is searched. That search is
-exhaustive, not an approximation, for any realistic board: with the pool
-capped at 10, splitting it across n attackers has C(10+n, n) possibilities
-- about 185,000 at 10 attacking characters and still under 1.2 million at
-13, both already extreme - so the 1,000,000-split cap exists only to bound
-truly pathological attacker counts, not to trim a normal search early (an
+out. This search doesn't need an attack order at all: whether a split is
+lethal at all, and the Life total it leaves if not, is exactly the same
+regardless of what order the battles happen in (with no Blocker/Counter
+assumed - the base case this search filters on - every connecting hit
+lands no matter the sequence, so only the TOTAL hit count matters). Order
+only starts to matter once the defender gets to make real block/Counter
+choices against it - see "Attack order search" just below - so it's
+handled as a separate pass, after this one, over just the lines this
+search already found worth scoring. This search is exhaustive, not an
+approximation, for any realistic board: with the pool capped at 10,
+splitting it across n attackers has C(10+n, n) possibilities - about
+185,000 at 10 attacking characters and still under 1.2 million at 13, both
+already extreme - so the 1,000,000-split cap exists only to bound truly
+pathological attacker counts, not to trim a normal search early (an
 earlier, much lower cap did exactly that - see the commit history for the
 bug it caused and how the fix was verified).
+
+**Attack order search:** a battle that's allowed to CONNECT early can fund
+Countering a pricier one later (see "Assumed Counter budget" below for the
+mid-turn hand-growth mechanic that makes this true), so the SAME set of
+battles can be survivable in one order and lethal in another - this is a
+real effect, not a simplification, confirmed with a constructed two-battle
+example (one cheap to Counter, one expensive, a Counter budget that can't
+afford either up front but can afford the cheap one after the other
+connects) where attacking in one order is 0% and the other is 100%, same
+inputs otherwise. Trying every order against the full Monte Carlo check
+(`TRIAL_COUNT` samples) for every DON!! split the search above finds would
+be exhaustive but is computationally far too expensive (tens of millions
+of checks even for a 7-attacker board), so this runs as a bounded second
+pass instead: for the best few DON!! splits already scored (budgeted by
+total solver calls, not a fixed candidate count, since a candidate's own
+attacker count sets its own cost - see `ORDER_SEARCH_CALL_BUDGET` in
+`lethal.js`), it tries reordering their battles, using ONE quick solver
+call per candidate order against the single average-resource estimate
+(the same numbers behind the live "Quick estimate" preview) to find a
+promising reordering cheaply, then - critically - confirms that candidate
+actually scores HIGHER under the real Monte Carlo check before ever
+adopting it. A bad guess from the cheap pass just gets discarded, so this
+can only ever improve a line's percentage, never make it worse than
+leaving its battles in roster order. Exhaustive up to 8 simultaneously
+attacking units (8! = 40,320 orders - already an extreme board); beyond
+that this pass is skipped for that candidate rather than attempted
+partially, since a non-exhaustive order search can't be trusted to find
+the right answer, only roster order's own score is kept. The order a line
+settles on is exactly what's shown in its results - its sequence tiles and
+its play-by-play log both narrate in that attack order, not roster order.
 
 **Blocking:** since blocking an attack costs the defender nothing (no
 Life lost either way in this tool, regardless of the power comparison), a
@@ -524,13 +565,15 @@ nothing to add until it releases.
 
 `public/lethal.js` bundles every opponent-side input (Leader power, Life,
 color, DON!! available, Blocker count, deck composition, Event counts) into
-one `defender` context object via `readDefenderContext()`. `resolveLine()`
-and `defenderCanSurvive()` are unchanged by the percentage feature -
-they're run once per Monte Carlo sample, fed that sample's
-`counterBudget`/`effectiveStartingLife` instead of the single average (see
-`sampleDefenderResources()`, `buildDeckComposition()`, and
+one `defender` context object via `readDefenderContext()`. `buildBattles()`
+(per-attacker, order-independent) and `defenderCanSurvive()` are unchanged
+by the percentage feature - they're run once per Monte Carlo sample, fed
+that sample's `counterBudget`/`effectiveStartingLife` instead of the single
+average (see `sampleDefenderResources()`, `buildDeckComposition()`, and
 `estimateLethalPercent()`), so the same exact solver already described
-above is what each of the thousands of samples is checked against.
+above is what each of the thousands of samples is checked against, for
+whichever order a line settled on (roster order, or a reorder found by
+`findBetterOrder()` - see "Attack order search").
 
 ## Architecture
 

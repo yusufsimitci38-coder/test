@@ -23,10 +23,26 @@
 // DON!! allocation search: rather than asking the user to fix a DON amount
 // per attacker and re-run one scenario at a time, they enter a total DON!!
 // pool and (optionally) a per-attacker cap, and this enumerates every valid
-// way to split the pool across attackers (attack order is fixed as
-// configured), runs the combat simulation on each split, and reports which
-// splits are lethal. Order isn't searched - only the DON!! split is - to
-// keep the search space bounded and the result legible.
+// way to split the pool across attackers, runs the combat simulation on
+// each split, and reports which splits are lethal.
+//
+// Attack order search: the user lists which attackers are on board, not
+// what order to attack in - this searches that too, since order genuinely
+// changes the outcome (a battle that's allowed to connect EARLY can fund
+// Countering a more expensive one LATER, via the mid-turn hand-growth
+// mechanic below - a constructed example with the same two battles proves
+// both orders aren't equivalent). Whether a DON!! split is lethal at all
+// (and the resulting Life total) doesn't depend on order - with no
+// Blocker/Counter assumed, every connecting hit lands regardless of
+// sequence - so only the LETHAL PERCENTAGE needs an order search, done as a
+// second pass over the best few DON!! splits already found: try reordering
+// (bounded by a factorial cutoff - exhaustive up to 8 simultaneous
+// attackers, skipped above that), using one quick DP call per candidate
+// order against the average-resource estimate to find a promising
+// reordering cheaply, then confirming it actually scores higher with the
+// real Monte Carlo check before ever adopting it - so this can only improve
+// a line's percentage, never regress it below what the given order alone
+// would have found. See findBetterOrder() for the exact budget.
 //
 // Blocking: every attacker is simply configured as attacking the Leader -
 // there's no per-attacker "which Blocker intercepts this" assignment,
@@ -122,6 +138,15 @@
   const MAX_LINES_SHOWN = 10; // compact rows now, so more fit comfortably
   const TRIAL_COUNT = 2000; // Monte Carlo samples per line scored
   const CANDIDATE_CAP = 60; // lines eligible for scoring when more than this are base-lethal
+  // Total defenderCanSurvive() calls the order-search pass (see
+  // findBetterOrder()) may spend across ALL scored candidates combined, so
+  // the per-candidate share shrinks automatically as a candidate's own
+  // battle count (and so its n! cost) grows - see calculate() for how this
+  // is actually spent. 200,000 calls measured at ~20us each in Node, so
+  // ~4s worst case; always tries at least the top ORDER_SEARCH_MIN_CANDIDATES
+  // regardless, as long as each is individually under ORDER_SEARCH_MAX_FACTORIAL.
+  const ORDER_SEARCH_CALL_BUDGET = 200_000;
+  const ORDER_SEARCH_MIN_CANDIDATES = 3;
 
   const leaderRowContainer = document.getElementById('atk-leader-row-container');
   const leaderTemplate = document.getElementById('lethal-leader-template');
@@ -269,10 +294,14 @@
   }
 
   // Colors each "Your Board" row with the exact same accent attackerAccent()
-  // gives its sequence tile in the results, by index within the SAME
-  // attacksThisTurn-filtered order calculate() uses - so row and tile always
-  // match. Only the Leader can opt out (its own checkbox); every Character
-  // row always attacks, so only the Leader shifts indices when toggled.
+  // gives its sequence tile in the results, by this attacker's STABLE
+  // roster index (its position in the attacksThisTurn-filtered list
+  // calculate() builds) - a color identifies WHICH attacker this is, not
+  // where they land in a line's (now search-chosen, not user-set) attack
+  // order, so row and tile always match by identity even when a result's
+  // sequence reorders them. Only the Leader can opt out (its own checkbox);
+  // every Character row always attacks, so only the Leader shifts indices
+  // when toggled.
   function refreshAttackerAccents() {
     const leaderRow = leaderRowContainer.querySelector('.lethal-attacker-row');
     const leaderAttacks = leaderRow.querySelector('.lethal-atk-attacks').checked;
@@ -295,16 +324,6 @@
     const row = node.querySelector('.lethal-attacker-row');
     row.querySelector('.lethal-remove-btn').addEventListener('click', () => {
       row.remove();
-      refreshAttackerAccents();
-    });
-    row.querySelector('.lethal-move-up').addEventListener('click', () => {
-      const prev = row.previousElementSibling;
-      if (prev) attackersList.insertBefore(row, prev);
-      refreshAttackerAccents();
-    });
-    row.querySelector('.lethal-move-down').addEventListener('click', () => {
-      const next = row.nextElementSibling;
-      if (next) attackersList.insertBefore(next, row);
       refreshAttackerAccents();
     });
     attackersList.appendChild(row);
@@ -457,58 +476,59 @@
     return { distributions, truncated };
   }
 
-  // Runs the combat resolution for one specific DON!! split across
-  // `attackers` (parallel array `donAssignment`), in list order, against
-  // the Leader - assuming the opponent plays NO Counter and NO Blocker.
-  // Returns the base lethal/finalLife outcome and the list of battles (with
-  // their hit count and the Counter cost to negate each one) for the
-  // defense-feasibility search below. Processes every attacker (doesn't
-  // stop at the first lethal hit) so that search has the full picture of
-  // what's negatable.
-  //
-  // Deliberately builds no human-readable log: this runs once per DON!!
-  // split explored (up to MAX_DISTRIBUTIONS, i.e. potentially hundreds of
-  // thousands with several attackers), while the log is only ever shown for
-  // the handful of lines actually rendered - see buildLineLog() below,
-  // called lazily just for those.
-  function evaluateLine(attackers, donAssignment, defender) {
+  // Builds the per-attacker battle stats (hits, Counter cost to negate,
+  // Banish) for one specific DON!! split - each one is intrinsic to that
+  // attacker and its assigned DON!!, so unlike the old resolveLine(), this
+  // needs no attack order at all. Only attackers that actually connect
+  // (effective power >= Leader power) get a battle entry; each one carries
+  // its `rosterIndex` (position in the attacksThisTurn-filtered attackers
+  // list - the same stable identity used for accent colors) so a later
+  // reordering (see findBetterOrder() below) can still be traced back to
+  // who's attacking and rendered/logged correctly.
+  function buildBattles(attackers, donAssignment, defender) {
     const battles = [];
-    let life = defender.startingLife;
-    let lethal = false;
-
+    const defPower = defender.leaderPower;
     for (let i = 0; i < attackers.length; i += 1) {
       const attacker = attackers[i];
       const effectivePower = attacker.power + donAssignment[i] * 1000;
-
       // Color-specific Counter Events (universal/Red) add power here too,
       // but as part of the shared Counter budget evaluated per-battle in
       // defenderCanSurvive() rather than a static boost to defPower itself
       // - see the header comment.
-      const defPower = defender.leaderPower;
       if (effectivePower < defPower) continue;
-
       const hits = attacker.double ? 2 : 1;
       const costPower = (Math.floor((effectivePower - defPower) / 1000) + 1) * 1000;
-      battles.push({ hits, costPower, banish: attacker.banish });
-
-      for (let h = 0; h < hits; h += 1) {
-        if (life <= 0) lethal = true;
-        else life -= 1;
-      }
+      battles.push({ rosterIndex: i, hits, costPower, banish: attacker.banish });
     }
-
-    return { lethal, finalLife: life, battles };
+    return battles;
   }
 
-  // The human-readable play-by-play for one specific line, same assumptions
-  // as evaluateLine() (no Counter, no Blocker) - built only for lines that
-  // end up displayed, not for every distribution the search explores.
-  function buildLineLog(attackers, donAssignment, defender) {
+  // Whether a given set of battles is lethal at all, and the Life total it
+  // leaves behind, assuming NO Blocker/Counter - i.e. every connecting hit
+  // lands. This is the base-case check the DON!! search filters on, and
+  // deliberately takes no attack order: with nothing stopping any hit, the
+  // total hit count is all that matters (order only starts to matter once
+  // the defender gets to make block/Counter choices - see
+  // defenderCanSurvive() - which is exactly why the DON!! search itself
+  // doesn't need an order and can stay as cheap as it already is).
+  function baseLethalOutcome(battles, startingLife) {
+    const totalHits = battles.reduce((sum, b) => sum + b.hits, 0);
+    return { lethal: totalHits > startingLife, finalLife: Math.max(0, startingLife - totalHits) };
+  }
+
+  // The human-readable play-by-play for one specific line, in a specific
+  // `displayOrder` (an array of roster indices - the attack order to narrate
+  // in, whether that's the search-chosen order for a scored line or just
+  // roster order for the no-attacks-landed/no-attackers fallbacks). Same
+  // no-Blocker/no-Counter assumption as baseLethalOutcome() - built only for
+  // lines that end up displayed, not for every distribution the search
+  // explores.
+  function buildLineLog(attackers, donAssignment, displayOrder, defender) {
     const log = [];
     let life = defender.startingLife;
     let lethal = false;
 
-    for (let i = 0; i < attackers.length; i += 1) {
+    for (const i of displayOrder) {
       const attacker = attackers[i];
       const donAssigned = donAssignment[i];
       const effectivePower = attacker.power + donAssigned * 1000;
@@ -625,6 +645,76 @@
       }
     }
     return false;
+  }
+
+  function factorial(n) {
+    let f = 1;
+    for (let i = 2; i <= n; i += 1) f *= i;
+    return f;
+  }
+
+  // Calls `onPermutation(orderArray)` for every permutation of [0..n-1] (via
+  // Heap's algorithm, so each step is a single swap - no array-building
+  // overhead beyond the one slice() needed to hand the caller a stable
+  // copy), stopping as soon as it returns true. The identity order
+  // ([0,1,...,n-1], i.e. "don't reorder") is always visited first.
+  function forEachPermutation(n, onPermutation) {
+    const indices = Array.from({ length: n }, (_, i) => i);
+    if (onPermutation(indices.slice())) return;
+    const c = new Array(n).fill(0);
+    let i = 0;
+    while (i < n) {
+      if (c[i] < i) {
+        if (i % 2 === 0) [indices[0], indices[i]] = [indices[i], indices[0]];
+        else [indices[c[i]], indices[i]] = [indices[i], indices[c[i]]];
+        if (onPermutation(indices.slice())) return;
+        c[i] += 1;
+        i = 0;
+      } else {
+        c[i] = 0;
+        i += 1;
+      }
+    }
+  }
+
+  // Order genuinely changes a line's survivability: a battle allowed to
+  // connect EARLY can fund Countering a pricier one LATER (the mid-turn
+  // hand-growth mechanic), so a defender facing battles in one order can
+  // survive when the same battles in another order would be lethal. Trying
+  // every order against the real Monte Carlo check (TRIAL_COUNT samples
+  // each) is what we actually want, but is far too expensive to run for
+  // every candidate line and every one of its n! orders - so this instead
+  // runs ONE cheap defenderCanSurvive() call per order, against the
+  // defender's single average-resource estimate (the same numbers behind
+  // the live "Quick estimate" preview - see readDefenderContext()), and
+  // returns the first order (other than the given one) where even that
+  // average-resource defender can't survive. That's a proxy, not a proof -
+  // the caller (calculate()) only ever ADOPTS the returned order after
+  // confirming it scores higher under the real Monte Carlo check too, so a
+  // bad proxy pick just gets discarded rather than ever making a line worse
+  // than leaving its battles in roster order.
+  //
+  // Bounded by ORDER_SEARCH_MAX_FACTORIAL so this never attempts something
+  // like 10! (3.6M) orders - beyond that, this returns null immediately
+  // (no reorder attempted) rather than hanging the search for an extreme
+  // board size; see calculate() for how many of a result set's candidates
+  // actually get a budget to call this at all.
+  const ORDER_SEARCH_MAX_FACTORIAL = 100_000; // n <= 8 (8! = 40,320); n = 9 (362,880) is already over this
+
+  function findBetterOrder(battles, defender) {
+    const n = battles.length;
+    if (n <= 1 || factorial(n) > ORDER_SEARCH_MAX_FACTORIAL) return null;
+    let found = null;
+    forEachPermutation(n, (order) => {
+      if (order.every((v, i) => v === i)) return false; // the given order itself - nothing to adopt
+      const ordered = order.map((idx) => battles[idx]);
+      if (!defenderCanSurvive(ordered, defender)) {
+        found = ordered;
+        return true;
+      }
+      return false;
+    });
+    return found;
   }
 
   // Builds one flat array of card-category labels representing the
@@ -762,8 +852,13 @@
     const caps = attackers.map((a) => Math.min(a.donCap, totalDon));
     const { distributions, truncated } = enumerateDonDistributions(caps, totalDon, MAX_DISTRIBUTIONS);
 
+    // battles is order-independent (see buildBattles()/baseLethalOutcome()),
+    // built once per distribution here in plain roster order - that's the
+    // starting point order search (below) may improve on for the lines that
+    // end up actually being scored.
     const results = distributions.map((donAssignment) => {
-      const { lethal, finalLife, battles } = evaluateLine(attackers, donAssignment, defender);
+      const battles = buildBattles(attackers, donAssignment, defender);
+      const { lethal, finalLife } = baseLethalOutcome(battles, defender.startingLife);
       const donUsed = donAssignment.reduce((sum, x) => sum + x, 0);
       return { donAssignment, donUsed, lethal, finalLife, battles };
     });
@@ -796,9 +891,51 @@
       scored = shortlist
         .map((r) => ({ ...r, percent: estimateLethalPercent(r.battles, resourceSamples, defender) }))
         .sort((a, b) => b.percent - a.percent || b.donUsed - a.donUsed);
+
+      // Order search, second pass: try reordering the best few candidates'
+      // battles (see findBetterOrder() for exactly how and why this can
+      // only ever help, never regress a line below its roster-order score)
+      // and re-rank once any improvements are in. Budgeted in total DP-call
+      // count rather than a fixed candidate count, since candidates can
+      // have very different battle counts (and therefore wildly different
+      // per-candidate search costs) within the same result set; always
+      // tries at least the top few regardless of cost, as long as a single
+      // one of their orders is individually affordable.
+      let orderSearchBudget = ORDER_SEARCH_CALL_BUDGET;
+      let orderSearchAttempts = 0;
+      for (const candidate of scored) {
+        const cost = factorial(candidate.battles.length);
+        if (cost > ORDER_SEARCH_MAX_FACTORIAL) continue;
+        if (orderSearchAttempts >= ORDER_SEARCH_MIN_CANDIDATES && cost > orderSearchBudget) continue;
+        orderSearchBudget -= cost;
+        orderSearchAttempts += 1;
+
+        const betterOrder = findBetterOrder(candidate.battles, defender);
+        if (!betterOrder) continue;
+        const newPercent = estimateLethalPercent(betterOrder, resourceSamples, defender);
+        if (newPercent > candidate.percent) {
+          candidate.battles = betterOrder;
+          candidate.percent = newPercent;
+        }
+      }
+      scored.sort((a, b) => b.percent - a.percent || b.donUsed - a.donUsed);
     } else {
       const best = results.slice().sort((a, b) => a.finalLife - b.finalLife || b.donUsed - a.donUsed)[0];
       if (best) scored = [{ ...best, percent: 0 }];
+    }
+
+    // The display order for each scored line: its battles' rosterIndex
+    // values (in whatever order findBetterOrder() above settled on, or
+    // plain roster order if it wasn't attempted or found nothing better),
+    // followed by any attackers that don't connect at all in this line -
+    // their position can't affect the outcome, so they're just appended in
+    // roster order at the end.
+    for (const result of scored) {
+      const connected = new Set(result.battles.map((b) => b.rosterIndex));
+      result.order = [
+        ...result.battles.map((b) => b.rosterIndex),
+        ...attackers.map((_, i) => i).filter((i) => !connected.has(i)),
+      ];
     }
 
     renderSearchResult({ attackers, scored, totalDon, truncated, defender });
@@ -812,14 +949,20 @@
     return `hsl(${(index * 57) % 360}deg 65% 60%)`;
   }
 
-  // Renders one line's attack order as a compact row of small tiles - each
-  // one's effective power (base + DON!! this line assigns it) and a short
-  // name tag - so a line can be scanned at a glance instead of read as a
-  // sentence. The full play-by-play log is still available (see
-  // renderLine()), just no longer the only way to see what a line does.
+  // Renders one line's attack order (result.order - the search-chosen
+  // sequence, see calculate()) as a compact row of small tiles - each one's
+  // effective power (base + DON!! this line assigns it) and a short name
+  // tag - so a line can be scanned at a glance instead of read as a
+  // sentence. Each tile is colored by attackerAccent(rosterIndex) - the
+  // SAME identity-based color as that attacker's "Your Board" row - so a
+  // tile reads as "this specific attacker," not "whatever's in this slot
+  // today," even though which slot they land in can now vary line to line.
+  // The full play-by-play log is still available (see renderLine()), just
+  // no longer the only way to see what a line does.
   function renderSequenceTiles(attackers, result) {
-    return attackers
-      .map((a, i) => {
+    return result.order
+      .map((i) => {
+        const a = attackers[i];
         const don = result.donAssignment[i];
         const effectivePower = a.power + don * 1000;
         const tag = a.isLeader ? 'Leader' : a.name;
@@ -846,7 +989,7 @@
   // collapsed, since the compact row already says what matters for
   // scanning the list.
   function renderLine(attackers, result, totalDon, open, defender) {
-    const log = buildLineLog(attackers, result.donAssignment, defender);
+    const log = buildLineLog(attackers, result.donAssignment, result.order, defender);
     const logHtml = log.length
       ? `<ul class="lethal-log">${log.map((entry) => `<li class="lethal-log-${entry.type}">${escapeHtml(entry.text)}</li>`).join('')}</ul>`
       : '<p class="empty-state">No attacks landed.</p>';
@@ -899,11 +1042,13 @@
     const metaLine =
       top.percent === 0
         ? `Not lethal with this plan - opponent survives with ${top.finalLife} Life left.`
-        : top.donUsed === totalDon
-          ? `Uses all ${totalDon} DON!! available - the strongest line at this chance of lethal.`
-          : `${top.donUsed} of ${totalDon} DON!! used - the strongest line at this chance of lethal (the rest wouldn't improve it).`;
+        : totalDon === 0
+          ? 'No DON!! needed - the strongest line at this chance of lethal.'
+          : top.donUsed === totalDon
+            ? `Uses all ${totalDon} DON!! available - the strongest line at this chance of lethal.`
+            : `${top.donUsed} of ${totalDon} DON!! used - the strongest line at this chance of lethal (the rest wouldn't improve it).`;
 
-    const topLog = buildLineLog(attackers, top.donAssignment, defender);
+    const topLog = buildLineLog(attackers, top.donAssignment, top.order, defender);
 
     resultEl.innerHTML = `
       <div class="lethal-best-card">
@@ -918,7 +1063,7 @@
       </div>
       <details class="lethal-line-detail-standalone" open>
         <summary>Full play-by-play for this line</summary>
-        <p class="lethal-hint">Shown assuming the opponent plays no Blocker or Counter at all - that's what sets the attack order and hit count below. The percentage above is what's actually checked against their Blockers, Counter, and DON!! (see the note below).</p>
+        <p class="lethal-hint">Shown in the attack order recommended above, assuming the opponent plays no Blocker or Counter at all - that's what sets the hit count below. The percentage above is what's actually checked against their Blockers, Counter, and DON!! (see the note below).</p>
         ${
           topLog.length
             ? `<ul class="lethal-log">${topLog.map((entry) => `<li class="lethal-log-${entry.type}">${escapeHtml(entry.text)}</li>`).join('')}</ul>`

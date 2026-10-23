@@ -293,11 +293,12 @@
       </div>
 
       <section class="lethal-panel">
-        <h2>Attack order</h2>
+        <h2>Find lethal</h2>
         <p class="lethal-hint">
-          Attacks resolve top to bottom. Drag isn't supported yet; use the ↑/↓ buttons on each row above to
-          reorder. Attack order is fixed as you set it above - the calculator searches your DON!! split, and (given
-          how many active Blockers you entered above) which attacks the opponent blocks and which they Counter.
+          Just list who's attacking above - the calculator searches your DON!! split AND the order to attack in
+          (order can change whether a Life card an earlier hit reveals funds Countering a later, pricier attack),
+          plus (given how many active Blockers you entered above) which attacks the opponent blocks and which they
+          Counter. The recommended order for each line is shown in its results below.
         </p>
         <button type="button" id="calculate-lethal-btn" class="lethal-calculate-btn">Find Lethal Lines</button>
       </section>
@@ -349,8 +350,6 @@
       <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-double" /> Double Attack</label>
       <label class="lethal-checkbox"><input type="checkbox" class="lethal-atk-banish" /> Banish</label>
       <div class="lethal-row-actions">
-        <button type="button" class="lethal-move-up" aria-label="Move up">↑</button>
-        <button type="button" class="lethal-move-down" aria-label="Move down">↓</button>
         <button type="button" class="lethal-remove-btn" aria-label="Remove attacker">✕</button>
       </div>
     </div>

@@ -695,8 +695,6 @@ main {
 .lethal-attacker-row { border-left: 4px solid var(--seq-accent, var(--border)); }
 
 .lethal-remove-btn,
-.lethal-move-up,
-.lethal-move-down,
 .lethal-add-btn,
 .lethal-calculate-btn {
   background: var(--surface);
@@ -709,8 +707,6 @@ main {
 }
 
 .lethal-remove-btn:hover,
-.lethal-move-up:hover,
-.lethal-move-down:hover,
 .lethal-add-btn:hover { border-color: var(--accent); }
 
 .lethal-add-btn { margin-top: 0.6rem; }
