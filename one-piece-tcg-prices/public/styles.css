@@ -10,6 +10,7 @@
   --down: #ef5555;
   --warn: #e0a930;
   --border: #2c3157;
+  --blocker-blue: #3b82f6;
 }
 
 * { box-sizing: border-box; }
@@ -654,6 +655,10 @@ main {
 
 .lethal-token.filled { background: var(--accent); border-color: var(--accent); }
 
+/* Active Blockers get their own color (blue) instead of the generic accent
+   red, so they read as a distinct resource from DON!! at a glance. */
+.lethal-token-row--blocker .lethal-token.filled { background: var(--blocker-blue); border-color: var(--blocker-blue); }
+
 .lethal-token-overflow { font-size: 0.75rem; color: var(--muted); margin-left: 0.15rem; }
 
 /* Toggle chip - turns a plain checkbox + label (Double Attack, Banish) into
@@ -681,6 +686,13 @@ main {
   margin: 0;
   accent-color: #fff;
 }
+
+/* Each attacker row picks up the same accent color used for its tile in
+   the results view (set as --seq-accent inline by refreshAttackerAccents),
+   so it's easy to see which "Your Board" row produced which results tile.
+   Falls back to the plain border color when no accent is set (the Leader
+   row when "Attacks this turn" is unchecked - it won't appear in results). */
+.lethal-attacker-row { border-left: 4px solid var(--seq-accent, var(--border)); }
 
 .lethal-remove-btn,
 .lethal-move-up,

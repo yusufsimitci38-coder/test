@@ -150,7 +150,7 @@
   // the input keeps its id/class and stays the single source of truth, so
   // every existing selector-based read (readAttackerRow, readDefenderContext,
   // etc.) keeps working completely unchanged.
-  function enhanceStepper(input, { step = 1, min = 0 } = {}) {
+  function enhanceStepper(input, { step = 1, min = 0, max = Infinity } = {}) {
     if (!input || input.dataset.stepperReady) return;
     input.dataset.stepperReady = '1';
     const wrap = document.createElement('div');
@@ -170,11 +170,19 @@
     input.classList.add('lethal-stepper-input');
     const bump = (delta) => {
       const current = Number(input.value) || 0;
-      input.value = Math.max(min, current + delta);
+      input.value = Math.min(max, Math.max(min, current + delta));
       input.dispatchEvent(new Event('input', { bubbles: true }));
     };
     dec.addEventListener('click', () => bump(-step));
     inc.addEventListener('click', () => bump(step));
+    // Also clamp a directly-typed value (not just the +/- buttons) - e.g.
+    // the DON!! pool can never exceed 10, the number of cards in the DON!!
+    // deck.
+    if (Number.isFinite(max)) {
+      input.addEventListener('input', () => {
+        if (Number(input.value) > max) input.value = max;
+      });
+    }
   }
 
   // Replaces a number <input> with a row of tap-to-set chips (0..max) - the
@@ -213,11 +221,11 @@
   // a stepper, so a DON!! pool or Blocker count reads as a visual stack
   // instead of just a number - capped at `max` tokens shown, with the exact
   // count always still visible in the stepper's own number field.
-  function enhanceTokenRow(input, max) {
+  function enhanceTokenRow(input, max, variant) {
     if (!input || input.dataset.tokenReady) return;
     input.dataset.tokenReady = '1';
     const wrap = document.createElement('div');
-    wrap.className = 'lethal-token-row';
+    wrap.className = variant ? `lethal-token-row lethal-token-row--${variant}` : 'lethal-token-row';
     input.insertAdjacentElement('afterend', wrap);
     const tokens = [];
     for (let i = 0; i < max; i += 1) {
@@ -253,26 +261,57 @@
     row.querySelectorAll('.lethal-checkbox').forEach(enhanceToggleChip);
   }
 
+  // Colors each "Your Board" row with the exact same accent attackerAccent()
+  // gives its sequence tile in the results, by index within the SAME
+  // attacksThisTurn-filtered order calculate() uses - so row and tile always
+  // match. Only the Leader can opt out (its own checkbox); every Character
+  // row always attacks, so only the Leader shifts indices when toggled.
+  function refreshAttackerAccents() {
+    const leaderRow = leaderRowContainer.querySelector('.lethal-attacker-row');
+    const leaderAttacks = leaderRow.querySelector('.lethal-atk-attacks').checked;
+    const charRows = [...attackersList.querySelectorAll('.lethal-attacker-row')];
+    let index = 0;
+    if (leaderAttacks) {
+      leaderRow.style.setProperty('--seq-accent', attackerAccent(index));
+      index += 1;
+    } else {
+      leaderRow.style.removeProperty('--seq-accent');
+    }
+    charRows.forEach((row) => {
+      row.style.setProperty('--seq-accent', attackerAccent(index));
+      index += 1;
+    });
+  }
+
   function addAttackerRow() {
     const node = attackerTemplate.content.cloneNode(true);
     const row = node.querySelector('.lethal-attacker-row');
-    row.querySelector('.lethal-remove-btn').addEventListener('click', () => row.remove());
+    row.querySelector('.lethal-remove-btn').addEventListener('click', () => {
+      row.remove();
+      refreshAttackerAccents();
+    });
     row.querySelector('.lethal-move-up').addEventListener('click', () => {
       const prev = row.previousElementSibling;
       if (prev) attackersList.insertBefore(row, prev);
+      refreshAttackerAccents();
     });
     row.querySelector('.lethal-move-down').addEventListener('click', () => {
       const next = row.nextElementSibling;
       if (next) attackersList.insertBefore(next, row);
+      refreshAttackerAccents();
     });
     attackersList.appendChild(row);
     enhanceAttackerRow(row);
+    refreshAttackerAccents();
   }
 
   function initLeaderRow() {
     const node = leaderTemplate.content.cloneNode(true);
     leaderRowContainer.appendChild(node);
-    enhanceAttackerRow(leaderRowContainer.querySelector('.lethal-attacker-row'));
+    const row = leaderRowContainer.querySelector('.lethal-attacker-row');
+    enhanceAttackerRow(row);
+    row.querySelector('.lethal-atk-attacks').addEventListener('change', refreshAttackerAccents);
+    refreshAttackerAccents();
   }
 
   function readAttackerRow(row, isLeader) {
@@ -692,8 +731,8 @@
     // Monte Carlo over real sampled hands (see estimateLethalPercent()).
     // Cheap to do for however many lines actually come up in normal use;
     // CANDIDATE_CAP only kicks in for pathologically large DON!! searches,
-    // favoring the cheapest-DON!! lines so the cap doesn't change results
-    // for the common case.
+    // favoring the most-DON!!-used lines so the cap doesn't drop the
+    // eventual winner (see the tie-break note below) for the common case.
     const lethalResults = results.filter((r) => r.lethal);
     let scored = [];
     if (lethalResults.length) {
@@ -702,12 +741,20 @@
           ? lethalResults
           : lethalResults
               .slice()
-              .sort((a, b) => a.donUsed - b.donUsed)
+              .sort((a, b) => b.donUsed - a.donUsed)
               .slice(0, CANDIDATE_CAP);
       const resourceSamples = buildResourceSamples(defender, TRIAL_COUNT);
+      // Tie-break toward using MORE of the pool, not less: giving an
+      // attacker extra DON!! can only raise (never lower) a line's percent
+      // - it strictly raises the Counter cost to negate that battle - so
+      // whenever two distributions tie on percent, the one spending more
+      // DON!! is at worst just as good and never a real downgrade. This is
+      // what actually finds "the distribution that uses all available
+      // DON!! and is best" - every full-pool split is already enumerated
+      // above and scored here, so the sort just needs to prefer it.
       scored = shortlist
         .map((r) => ({ ...r, percent: estimateLethalPercent(r.battles, resourceSamples, defender) }))
-        .sort((a, b) => b.percent - a.percent || a.donUsed - b.donUsed);
+        .sort((a, b) => b.percent - a.percent || b.donUsed - a.donUsed);
     } else {
       const best = results.slice().sort((a, b) => a.finalLife - b.finalLife || b.donUsed - a.donUsed)[0];
       if (best) scored = [{ ...best, percent: 0 }];
@@ -810,7 +857,9 @@
     const metaLine =
       top.percent === 0
         ? `Not lethal with this plan - opponent survives with ${top.finalLife} Life left.`
-        : `${top.donUsed} of ${totalDon} DON!! used - the cheapest line at this chance of lethal.`;
+        : top.donUsed === totalDon
+          ? `Uses all ${totalDon} DON!! available - the strongest line at this chance of lethal.`
+          : `${top.donUsed} of ${totalDon} DON!! used - the strongest line at this chance of lethal (the rest wouldn't improve it).`;
 
     resultEl.innerHTML = `
       <div class="lethal-best-card">
@@ -876,9 +925,11 @@
   enhanceStepper(yellowHealCountInput, { step: 1 });
   enhanceChipPicker(defLifeInput, 10);
   enhanceStepper(defBlockerCountInput, { step: 1 });
-  enhanceTokenRow(defBlockerCountInput, 8);
-  enhanceStepper(donPoolInput, { step: 1 });
-  enhanceTokenRow(donPoolInput, 12);
+  enhanceTokenRow(defBlockerCountInput, 8, 'blocker');
+  // A player's total DON!! this turn can never exceed 10 - that's the
+  // entire DON!! deck.
+  enhanceStepper(donPoolInput, { step: 1, max: 10 });
+  enhanceTokenRow(donPoolInput, 10);
 
   initLeaderRow();
   addAttackerRow();

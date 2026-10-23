@@ -314,12 +314,20 @@ always resolves first.
 Blockers) is a stepper with -/+ buttons instead of a bare `<input
 type="number">`; Life is a row of tap-to-set chips that fill up together
 like a life-total meter; the DON!! pool and Active Blockers counts are
-additionally shown as small diamond tokens so the pool reads at a glance;
-and Double Attack/Banish/"Attacks this turn" are tap-to-toggle pills rather
-than checkboxes. None of this changes what's actually submitted - every
-widget just writes back to the same underlying input and fires the same
-`input` event a real keystroke would, so the calculation code below never
-knows the difference. Results are shown the same way: the top line gets a
+additionally shown as small diamond tokens so the pool reads at a glance
+(Blockers' tokens are blue, DON!!'s are the usual accent red, so the two
+resources aren't confused); and Double Attack/Banish/"Attacks this turn"
+are tap-to-toggle pills rather than checkboxes. None of this changes
+what's actually submitted - every widget just writes back to the same
+underlying input and fires the same `input` event a real keystroke would,
+so the calculation code below never knows the difference. Each attacker
+row in "Your Board" also picks up a thin left-border accent color, cycled
+by position the same way the results view colors its sequence tiles
+(`attackerAccent()`/`refreshAttackerAccents()`), kept in sync on every add,
+remove, reorder, and on the Leader's "Attacks this turn" toggle (the only
+thing that can shift the other rows' positions in the attack order) - so
+the row that set up a line and the tile it produced in the results always
+match colors. Results are shown the same way: the top line gets a
 percent ring, a "BEST LINE"/"CLOSEST LINE" badge, and a compact sequence of
 power tiles (one per attacker, consistently colored) showing the DON!!
 split at a glance, with the full play-by-play tucked into a collapsible
@@ -327,18 +335,25 @@ section beneath it; every other explored line gets one compact row -
 percent, a small progress bar, and its own sequence tiles - that expands
 into its own play-by-play on click.
 
-**DON!! allocation search:** instead of fixing a DON!! amount per attacker
-and re-running one scenario at a time, enter your total DON!! pool for the
-turn (e.g. 7) in "Total DON!! available this turn" and the calculator
-enumerates every way to split that pool across your attackers (each row's
-optional "Max DON" caps how much a specific attacker could legally
-receive), runs the combat math on each split, and scores every split that's
-lethal at all with a real percentage (see "Lethal percentage" below). The
-split with the highest percentage - ties broken by fewest DON!! used - is
-the recommended line, with a handful of others shown alongside it. Attack
-order stays fixed as you configured it above; only the DON!! split is
-searched, which keeps the search bounded (capped at 5,000 explored splits)
-and the results easy to read.
+**DON!! allocation search:** a player's total DON!! this turn can never
+exceed 10 - that's the entire DON!! deck - so "Total DON!! available this
+turn" is capped at 10. Instead of fixing a DON!! amount per attacker and
+re-running one scenario at a time, enter your total pool for the turn
+(e.g. 7) and the calculator enumerates every way to split that pool across
+your attackers (each row's optional "Max DON" caps how much a specific
+attacker could legally receive), runs the combat math on each split, and
+scores every split that's lethal at all with a real percentage (see
+"Lethal percentage" below). The split with the highest percentage - ties
+broken toward using MORE of the pool, not less - is the recommended line,
+with a handful of others shown alongside it. Giving an attacker extra
+DON!! can only raise (never lower) a line's percentage, since it strictly
+raises the Counter cost needed to negate that battle, so this tie-break is
+exactly "spend all available DON!! whenever it doesn't hurt the chance of
+lethal" - every full-pool split is already enumerated and scored, the
+tie-break just stops a leftover, no-better partial split from edging it
+out. Attack order stays fixed as you configured it above; only the DON!!
+split is searched, which keeps the search bounded (capped at 5,000
+explored splits) and the results easy to read.
 
 **Blocking:** since blocking an attack costs the defender nothing (no
 Life lost either way in this tool, regardless of the power comparison), a
