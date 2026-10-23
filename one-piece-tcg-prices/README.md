@@ -363,15 +363,21 @@ raises the Counter cost needed to negate that battle, so this tie-break is
 exactly "spend all available DON!! whenever it doesn't hurt the chance of
 lethal" - every full-pool split is already enumerated and scored, the
 tie-break just stops a leftover, no-better partial split from edging it
-out. This search doesn't need an attack order at all: whether a split is
-lethal at all, and the Life total it leaves if not, is exactly the same
-regardless of what order the battles happen in (with no Blocker/Counter
-assumed - the base case this search filters on - every connecting hit
-lands no matter the sequence, so only the TOTAL hit count matters). Order
-only starts to matter once the defender gets to make real block/Counter
-choices against it - see "Attack order search" just below - so it's
-handled as a separate pass, after this one, over just the lines this
-search already found worth scoring. This search is exhaustive, not an
+out. This search doesn't need a FULL order search of its own: even whether
+a split is lethal at all (no Blocker/Counter assumed - the base case this
+search filters on) can depend on order, since a Double Attack landing LAST
+can waste its second hit against an opponent who's already at 0 Life (see
+"Double Attack" above) - but the best possible order for exactly that
+question has a simple, cheap, provably-correct shortcut: put whichever
+battle has the FEWEST hits last (an exchange argument - swapping any other
+battle into last place can only reduce the hits already dealt before it).
+`buildBattles()` always arranges a distribution's battles that way, so this
+filtering step stays a single cheap pass per distribution rather than
+needing n! tries. Order matters MORE once the defender gets to make real
+block/Counter choices against it, though - see "Attack order search" just
+below - so that gets its own, separate, bounded search pass, after this
+one, over just the lines this search already found worth scoring. This
+search is exhaustive, not an
 approximation, for any legal board: with the pool capped at 10 and at most
 6 attackers (1 Leader + 5 Characters - the Character Area's real limit, now
 enforced by the "+ Add Attacking Character" button itself), splitting the
@@ -404,14 +410,15 @@ promising reordering cheaply, then - critically - confirms that candidate
 actually scores HIGHER under the real Monte Carlo check before ever
 adopting it. A bad guess from the cheap pass just gets discarded, so this
 can only ever improve a line's percentage, never make it worse than
-leaving its battles in roster order. Bounded at 8! = 40,320 orders; below
+leaving its battles in buildBattles()'s own default order (fewest hits
+last - see "Double Attack" above). Bounded at 8! = 40,320 orders; below
 that cutoff this is exhaustive, not a heuristic. With the 5-Character cap
 above, a line can have at most 6 attackers (6! = 720 orders) - well inside
 that bound - so in practice this pass is ALWAYS exhaustive for any legal
 board; the 40,320 cutoff exists only as a safety margin, not because a real
 board can reach it. The order a line settles on is exactly what's shown in
 its results - its sequence tiles and its play-by-play log both narrate in
-that attack order, not roster order.
+that attack order.
 
 **Blocking:** since blocking an attack costs the defender nothing (no
 Life lost either way in this tool, regardless of the power comparison), a
@@ -449,14 +456,31 @@ else in this project that cites it):
   block once per turn.
 - **DON!!:** each attached DON!! is +1000 power, for the turn only.
 - **Double Attack:** *not* "2x power" - it deals damage as two separate
-  Life-card hits, each its own reveal/Trigger opportunity. The log shows
-  both hits individually for exactly this reason.
+  Life-card hits, each its own reveal/Trigger opportunity, but each hit
+  only takes a Life card if one is actually left. **A Double Attack cannot
+  win the game on its own against a 1-Life opponent** - the official
+  Comprehensive Rules FAQ is explicit about this (Double Attack 4-10/4-11):
+  if the first hit takes the last Life card, the second hit has nothing to
+  take and simply does nothing, Trigger included. This isn't a
+  simplification - it changed a real bug in an earlier version of this tool
+  (and session), where a flat hit-count sum made a Double Attack landing
+  on low Life look lethal when it wasn't - see "Loss condition" just below
+  for why this makes attack ORDER matter even for whether a line is lethal
+  at all, not just for the Counter/Blocker interaction.
 - **Banish:** the Life card removed goes straight to the trash, unseen - no
   Trigger, ever, for that specific hit.
 - **Loss condition:** reaching 0 Life isn't itself a loss - the player
-  loses when they take a *successful* hit while already at 0 Life. A
-  Double Attack's second hit can be the one that does it even if the first
-  hit was what brought Life to exactly 0.
+  loses when they're attacked WHILE ALREADY at 0 Life. Critically, this is
+  checked once per BATTLE, before that battle's damage is dealt - not once
+  per individual hit within one multi-hit battle. So a Double Attack that
+  brings Life from 1 to 0 doesn't lose the game on its own hit count (see
+  above) - but a battle that STARTS once Life is already 0, whether it's a
+  single hit or another Double Attack, does. This means a Double Attack
+  landing LAST in a sequence can waste its second hit for nothing, while
+  the exact same battles with it landing FIRST instead (so something else
+  lands the final blow once Life is already 0) can be lethal - the order
+  genuinely changes the answer, which is exactly what the search described
+  below accounts for.
 
 These are exactly the two factors the request that prompted this page
 called out as missing from existing public lethal calculators (Double
@@ -576,13 +600,15 @@ nothing to add until it releases.
 `public/lethal.js` bundles every opponent-side input (Leader power, Life,
 color, DON!! available, Blocker count, deck composition, Event counts) into
 one `defender` context object via `readDefenderContext()`. `buildBattles()`
-(per-attacker, order-independent) and `defenderCanSurvive()` are unchanged
-by the percentage feature - they're run once per Monte Carlo sample, fed
-that sample's `counterBudget`/`effectiveStartingLife` instead of the single
-average (see `sampleDefenderResources()`, `buildDeckComposition()`, and
+(per-attacker; its own output IS ordered, fewest-hits-last by default - see
+"Double Attack" and "DON!! allocation search" above) and
+`defenderCanSurvive()` are unchanged by the percentage feature - they're
+run once per Monte Carlo sample, fed that sample's
+`counterBudget`/`effectiveStartingLife` instead of the single average (see
+`sampleDefenderResources()`, `buildDeckComposition()`, and
 `estimateLethalPercent()`), so the same exact solver already described
 above is what each of the thousands of samples is checked against, for
-whichever order a line settled on (roster order, or a reorder found by
+whichever order a line settled on (buildBattles()'s default order, or a reorder found by
 `findBetterOrder()` - see "Attack order search").
 
 ## Architecture

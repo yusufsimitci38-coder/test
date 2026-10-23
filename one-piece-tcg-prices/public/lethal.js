@@ -14,11 +14,25 @@
 //     uses it up for the turn whether the attacker wins or loses.
 //   - DON!!: each attached DON gives +1000 power, for the turn only.
 //   - Double Attack: NOT "2x power" - it deals damage as two separate
-//     Life-card hits, each its own reveal/Trigger opportunity.
+//     Life-card hits, each its own reveal/Trigger opportunity. Each hit
+//     only takes a Life card if one is actually left - a Double Attack
+//     landing against 1 Life takes that 1 card and stops there; it does
+//     NOT defeat the opponent on its own (official ruling, Comprehensive
+//     Rules FAQ, Double Attack 4-10/4-11: a Double Attack cannot win the
+//     game against a 1-Life opponent). Defeat only comes from a hit that
+//     lands WHILE ALREADY AT 0 Life - see "Loss condition" below - and
+//     that can only be a SEPARATE, later battle, not the same Double
+//     Attack's own second hit running out of cards to take.
 //   - Banish: the Life card removed goes straight to the trash, unseen -
 //     no Trigger, ever, for that hit specifically.
 //   - Loss condition: reaching 0 Life isn't itself a loss - the player
-//     loses when they take a successful hit WHILE ALREADY at 0 Life.
+//     loses when they take a successful hit WHILE ALREADY at 0 Life. This
+//     is checked once per BATTLE, before that battle's damage is dealt -
+//     not once per individual hit within a multi-hit battle - which is
+//     exactly what makes the Double Attack rule above true, and why attack
+//     ORDER affects whether a given set of battles is lethal at all, not
+//     just how the defender's Counter/Blocker choices play out (see
+//     baseLethalOutcome() and buildBattles()).
 //
 // DON!! allocation search: rather than asking the user to fix a DON amount
 // per attacker and re-run one scenario at a time, they enter a total DON!!
@@ -28,21 +42,31 @@
 //
 // Attack order search: the user lists which attackers are on board, not
 // what order to attack in - this searches that too, since order genuinely
-// changes the outcome (a battle that's allowed to connect EARLY can fund
-// Countering a more expensive one LATER, via the mid-turn hand-growth
-// mechanic below - a constructed example with the same two battles proves
-// both orders aren't equivalent). Whether a DON!! split is lethal at all
-// (and the resulting Life total) doesn't depend on order - with no
-// Blocker/Counter assumed, every connecting hit lands regardless of
-// sequence - so only the LETHAL PERCENTAGE needs an order search, done as a
-// second pass over the best few DON!! splits already found: try reordering
-// (bounded by a factorial cutoff - exhaustive up to 8 simultaneous
-// attackers, skipped above that), using one quick DP call per candidate
-// order against the average-resource estimate to find a promising
-// reordering cheaply, then confirming it actually scores higher with the
-// real Monte Carlo check before ever adopting it - so this can only improve
-// a line's percentage, never regress it below what the given order alone
-// would have found. See findBetterOrder() for the exact budget.
+// changes the outcome two different ways. First, even whether a DON!! split
+// is lethal AT ALL (no Blocker/Counter assumed) depends on order: a
+// multi-hit battle (Double Attack) whose excess hit would be the one taking
+// Life below 0 does NOT win on its own (see the Double Attack rule above) -
+// only a SEPARATE, later battle starting while Life is already 0 does - so
+// putting a Double Attack last can waste its second hit for nothing.
+// buildBattles() handles this cheaply without a full order search: it
+// always arranges a distribution's battles with the FEWEST-hit one last,
+// which is provably the best order for this specific question (an exchange
+// argument - swapping any other battle into last place can only reduce the
+// hits already dealt before it), so the DON!! search's "lethal at all"
+// filter stays correct and cheap for every distribution. Second, once a
+// split IS lethal, order affects the LETHAL PERCENTAGE too - a battle
+// allowed to connect EARLY can fund Countering a more expensive one LATER,
+// via the mid-turn hand-growth mechanic below (a constructed example with
+// the same two battles proves both orders aren't equivalent) - and THIS is
+// what the order-search pass below is actually for: for the best few DON!!
+// splits already found, try reordering (bounded by a factorial cutoff -
+// exhaustive up to 8 simultaneous attackers, skipped above that), using one
+// quick DP call per candidate order against the average-resource estimate
+// to find a promising reordering cheaply, then confirming it actually
+// scores higher with the real Monte Carlo check before ever adopting it -
+// so this can only improve a line's percentage, never regress it below
+// buildBattles()'s own default order. See findBetterOrder() for the exact
+// budget.
 //
 // Blocking: every attacker is simply configured as attacking the Leader -
 // there's no per-attacker "which Blocker intercepts this" assignment,
@@ -407,10 +431,10 @@
   }
 
   // Bundles every "what do we know/assume about the opponent" into one
-  // object, so evaluateLine() and defenderCanSurvive() have a single, stable
-  // place to read from - including the color-specific Counter Events (see
-  // the header comment for the exact mechanics and the simplifications
-  // involved). Hand cards are spent on Events first (universal, then Red),
+  // object, so buildBattles()/baseLethalOutcome() and defenderCanSurvive()
+  // have a single, stable place to read from - including the color-specific
+  // Counter Events (see the header comment for the exact mechanics and the
+  // simplifications involved). Hand cards are spent on Events first (universal, then Red),
   // and whatever's left funds the generic average-value Counter budget;
   // Yellow's heal is capped by hand size but tracked independently of that
   // spend - a documented, deliberately conservative simplification.
@@ -506,6 +530,14 @@
   // list - the same stable identity used for accent colors) so a later
   // reordering (see findBetterOrder() below) can still be traced back to
   // who's attacking and rendered/logged correctly.
+  //
+  // Sorted with the FEWEST-hit battle last as the default order - see the
+  // header comment on Double Attack for why that specific arrangement
+  // maximizes whether a split is lethal at all, before any order search
+  // (findBetterOrder()) even runs: putting a Double Attack LAST risks
+  // wasting its second hit against a defender who's already at 0 Life,
+  // since (per the official ruling) that doesn't win the game - only a
+  // SEPARATE, later attack starting while Life is already 0 does.
   function buildBattles(attackers, donAssignment, defender) {
     const battles = [];
     const defPower = defender.leaderPower;
@@ -521,29 +553,51 @@
       const costPower = (Math.floor((effectivePower - defPower) / 1000) + 1) * 1000;
       battles.push({ rosterIndex: i, hits, costPower, banish: attacker.banish });
     }
+    battles.sort((a, b) => b.hits - a.hits);
     return battles;
   }
 
-  // Whether a given set of battles is lethal at all, and the Life total it
-  // leaves behind, assuming NO Blocker/Counter - i.e. every connecting hit
-  // lands. This is the base-case check the DON!! search filters on, and
-  // deliberately takes no attack order: with nothing stopping any hit, the
-  // total hit count is all that matters (order only starts to matter once
-  // the defender gets to make block/Counter choices - see
-  // defenderCanSurvive() - which is exactly why the DON!! search itself
-  // doesn't need an order and can stay as cheap as it already is).
+  // Whether a given, ORDERED set of battles is lethal at all, and the Life
+  // total it leaves behind, assuming NO Blocker/Counter - i.e. every
+  // connecting battle takes as many Life cards as are left, up to its own
+  // hit count. Order matters here, unlike a flat hit-count sum would
+  // suggest: a Double Attack (or any multi-hit battle) that would be the
+  // one bringing Life below 0 does NOT win the game on its own - per the
+  // official ruling (One Piece Card Game Comprehensive Rules FAQ, Double
+  // Attack 4-10/4-11: a Double Attack cannot defeat a 1-Life opponent) a
+  // player loses only when THEY'RE ATTACKED WHILE ALREADY AT 0 LIFE - not
+  // merely when more damage is nominally dealt than Life remaining. So a
+  // battle whose hits exceed the Life actually left just takes however many
+  // cards ARE left (capped) and stops there, with no loss triggered by that
+  // excess - only a battle that STARTS with Life already at 0 (from an
+  // earlier battle having already exhausted it) triggers the loss. Passing
+  // battles in the order buildBattles() sorts them in (fewest hits last)
+  // gives this function's BEST possible answer for a given set of battles;
+  // the DON!! search relies on exactly that to filter "lethal at all"
+  // without needing a full order search for every distribution - see the
+  // header comment and findBetterOrder() for where order is searched
+  // further, for the Counter/Blocker interaction specifically.
   function baseLethalOutcome(battles, startingLife) {
-    const totalHits = battles.reduce((sum, b) => sum + b.hits, 0);
-    return { lethal: totalHits > startingLife, finalLife: Math.max(0, startingLife - totalHits) };
+    let lifeTaken = 0;
+    let lethal = false;
+    for (const battle of battles) {
+      if (lifeTaken >= startingLife) {
+        lethal = true;
+        break;
+      }
+      lifeTaken = Math.min(startingLife, lifeTaken + battle.hits);
+    }
+    return { lethal, finalLife: startingLife - lifeTaken };
   }
 
   // The human-readable play-by-play for one specific line, in a specific
   // `displayOrder` (an array of roster indices - the attack order to narrate
   // in, whether that's the search-chosen order for a scored line or just
   // roster order for the no-attacks-landed/no-attackers fallbacks). Same
-  // no-Blocker/no-Counter assumption as baseLethalOutcome() - built only for
-  // lines that end up displayed, not for every distribution the search
-  // explores.
+  // no-Blocker/no-Counter assumption and the same capped-per-battle Life
+  // model as baseLethalOutcome() (see its comment for the Double Attack
+  // ruling this encodes) - built only for lines that end up displayed, not
+  // for every distribution the search explores.
   function buildLineLog(attackers, donAssignment, displayOrder, defender) {
     const log = [];
     let life = defender.startingLife;
@@ -564,24 +618,30 @@
         continue;
       }
 
-      const hits = attacker.double ? 2 : 1;
-      for (let h = 0; h < hits; h += 1) {
-        if (life <= 0) {
-          if (!lethal) {
-            lethal = true;
-            log.push({ type: 'lethal', text: `${attacker.name} hits the Leader while Life is already 0 - LETHAL.` });
-          } else {
-            log.push({ type: 'note', text: `${attacker.name} also connects, but the game is already over by this point.` });
-          }
-        } else {
-          life -= 1;
-          const banishNote = attacker.banish ? 'Banished - no Trigger' : 'revealed - Trigger may activate';
-          log.push({
-            type: 'hit',
-            text: `${attacker.name}${donNote} hits the Leader (${effectivePower.toLocaleString()} vs ${defPower.toLocaleString()}). Life card removed (${banishNote}). Life now ${life}.`,
-          });
-        }
+      if (lethal) {
+        log.push({ type: 'note', text: `${attacker.name} also connects, but the game is already over by this point.` });
+        continue;
       }
+
+      if (life <= 0) {
+        lethal = true;
+        log.push({ type: 'lethal', text: `${attacker.name} hits the Leader while Life is already 0 - LETHAL.` });
+        continue;
+      }
+
+      const hits = attacker.double ? 2 : 1;
+      const cardsTaken = Math.min(hits, life);
+      life -= cardsTaken;
+      const banishNote = attacker.banish ? 'Banished - no Trigger' : 'revealed - Trigger may activate';
+      const cardWord = cardsTaken === 1 ? 'card' : 'cards';
+      const doubleNote =
+        hits === 2 && cardsTaken === 1
+          ? ` (Double Attack, but only 1 Life card was left to take - the second hit has nothing to take and does nothing)`
+          : '';
+      log.push({
+        type: 'hit',
+        text: `${attacker.name}${donNote} hits the Leader (${effectivePower.toLocaleString()} vs ${defPower.toLocaleString()}). ${cardsTaken} Life ${cardWord} removed (${banishNote})${doubleNote}. Life now ${life}.`,
+      });
     }
 
     return log;
@@ -594,9 +654,16 @@
   // Each battle has three possible outcomes: Blocked (free, costs 1 of the
   // fixed Blocker count, no hits, no hand gain - since the attack never
   // reaches the Leader at all), Countered (spend its cost now, no hits, no
-  // hand gain), or allowed to connect (hits count toward lethal, and -
-  // unless Banished - its Life card grows the budget for battles later in
-  // this same order).
+  // hand gain), or allowed to connect. Connecting only loses the game if the
+  // defender was ALREADY at 0 Life when this battle started - a battle
+  // itself never loses the game by nominally dealing more hits than Life
+  // remains; it just takes however many Life cards are actually left
+  // (capped) and stops there (see baseLethalOutcome()'s comment for the
+  // official Double Attack ruling this encodes, and for why battle order
+  // matters to this at all). A connecting battle's hand-growth gain is
+  // based on the Life cards it ACTUALLY took, not its nominal hit count -
+  // the official ruling is explicit that a hit with nothing left to take
+  // just does nothing, Trigger included.
   //
   // Blocking is never worse than Countering the same battle (same result,
   // but free instead of costing budget) - EXCEPT that Blockers are a
@@ -608,14 +675,19 @@
   // not something a simple "block the biggest hits first" rule gets right
   // in every case - so this solves it exactly.
   //
-  // Solved with a DP over (battle index, hits allowed through so far,
-  // Blockers used so far) -> the MAXIMUM achievable running Counter budget
-  // for that state. A higher budget can only ever help later decisions, so
-  // only the max per state needs to be kept - this keeps the search
-  // polynomial (battles × total hits × Blocker count) instead of
+  // Solved with a DP over (battle index, Life cards taken so far - capped at
+  // effectiveStartingLife, Blockers used so far) -> the MAXIMUM achievable
+  // running Counter budget for that state. A higher budget can only ever
+  // help later decisions, so only the max per state needs to be kept - this
+  // keeps the search polynomial (battles × Life × Blocker count) instead of
   // exponential, even though the decisions are sequential (budget earned
   // from one battle can't be spent on an earlier one, and a used Blocker
-  // can't be reused).
+  // can't be reused). A state with lifeTaken already at the cap simply has
+  // no "connect" transition out of it in the code below - that's exactly
+  // "attacked again while already at 0 Life," the actual loss condition -
+  // so it's not a state defenderCanSurvive() needs to represent at all; any
+  // state that DOES survive to the end of the loop is, by construction, one
+  // that never hit that condition.
   //
   // defender.counterBudget already includes color-specific Counter Event
   // power (universal + Red) via readDefenderContext(), and
@@ -624,45 +696,46 @@
   // just these two pre-computed numbers plus the Blocker count.
   function defenderCanSurvive(battles, defender) {
     const { effectiveStartingLife, counterBudget, avgPerCard, blockerCount } = defender;
-    const totalHits = battles.reduce((sum, b) => sum + b.hits, 0);
-    if (totalHits <= effectiveStartingLife) return true; // not even lethal before any defense
-
     const maxBlocks = Math.min(blockerCount, battles.length); // blocking more battles than exist is pointless
 
-    let dp = Array.from({ length: totalHits + 1 }, () => new Array(maxBlocks + 1).fill(-Infinity));
+    let dp = Array.from({ length: effectiveStartingLife + 1 }, () => new Array(maxBlocks + 1).fill(-Infinity));
     dp[0][0] = counterBudget;
 
     for (const battle of battles) {
-      const next = Array.from({ length: totalHits + 1 }, () => new Array(maxBlocks + 1).fill(-Infinity));
-      for (let h = 0; h <= totalHits; h += 1) {
+      const next = Array.from({ length: effectiveStartingLife + 1 }, () => new Array(maxBlocks + 1).fill(-Infinity));
+      for (let lifeTaken = 0; lifeTaken <= effectiveStartingLife; lifeTaken += 1) {
         for (let b = 0; b <= maxBlocks; b += 1) {
-          const budget = dp[h][b];
+          const budget = dp[lifeTaken][b];
           if (budget === -Infinity) continue;
 
           // Block: free, but uses up 1 of the fixed Blocker count.
-          if (b < maxBlocks && budget > next[h][b + 1]) {
-            next[h][b + 1] = budget;
+          if (b < maxBlocks && budget > next[lifeTaken][b + 1]) {
+            next[lifeTaken][b + 1] = budget;
           }
 
           // Counter: spend its cost now, no hits, no hand gain.
-          if (budget >= battle.costPower && budget - battle.costPower > next[h][b]) {
-            next[h][b] = budget - battle.costPower;
+          if (budget >= battle.costPower && budget - battle.costPower > next[lifeTaken][b]) {
+            next[lifeTaken][b] = budget - battle.costPower;
           }
 
-          // Let it connect: hits count, and it grows the budget unless Banished.
-          const nh = h + battle.hits;
-          if (nh <= totalHits) {
-            const gained = budget + (battle.banish ? 0 : battle.hits * avgPerCard);
-            if (gained > next[nh][b]) next[nh][b] = gained;
+          // Let it connect - only possible (i.e. survivable) if NOT already
+          // at the cap; takes up to battle.hits Life cards, however many
+          // are actually left, and grows the budget by that ACTUAL count
+          // (unless Banished), not the nominal hit count.
+          if (lifeTaken < effectiveStartingLife) {
+            const newLifeTaken = Math.min(effectiveStartingLife, lifeTaken + battle.hits);
+            const cardsTaken = newLifeTaken - lifeTaken;
+            const gained = budget + (battle.banish ? 0 : cardsTaken * avgPerCard);
+            if (gained > next[newLifeTaken][b]) next[newLifeTaken][b] = gained;
           }
         }
       }
       dp = next;
     }
 
-    for (let h = 0; h <= Math.min(effectiveStartingLife, totalHits); h += 1) {
+    for (let lifeTaken = 0; lifeTaken <= effectiveStartingLife; lifeTaken += 1) {
       for (let b = 0; b <= maxBlocks; b += 1) {
-        if (dp[h][b] !== -Infinity) return true;
+        if (dp[lifeTaken][b] !== -Infinity) return true;
       }
     }
     return false;
@@ -873,10 +946,14 @@
     const caps = attackers.map((a) => Math.min(a.donCap, totalDon));
     const { distributions, truncated } = enumerateDonDistributions(caps, totalDon, MAX_DISTRIBUTIONS);
 
-    // battles is order-independent (see buildBattles()/baseLethalOutcome()),
-    // built once per distribution here in plain roster order - that's the
-    // starting point order search (below) may improve on for the lines that
-    // end up actually being scored.
+    // buildBattles() already arranges each distribution's battles in its
+    // best order for the base lethal check (fewest hits last - see its
+    // comment and the Double Attack rule in the header comment), so
+    // baseLethalOutcome() here gives the correct "lethal at all" answer
+    // without needing a per-distribution order search. That same order is
+    // also just the starting point findBetterOrder() may improve on below,
+    // for the Counter/Blocker interaction, on whichever lines end up
+    // actually being scored.
     const results = distributions.map((donAssignment) => {
       const battles = buildBattles(attackers, donAssignment, defender);
       const { lethal, finalLife } = baseLethalOutcome(battles, defender.startingLife);
